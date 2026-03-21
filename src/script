@@ -1,0 +1,2 @@
+CONNECT 'jdbc:derby:db;create=true';
+run 'mixnfix_derby_schema.sql';

@@ -1,0 +1,58 @@
+
+Thresholds
+
+   List of gray intensities from 0 to 255. These intensities will be
+   used to separate background as white (0) and foreground as black (1)
+
+Min-Max Pixel Width
+
+   Maximum width of targets (3 a 7)
+
+Min-Max Pixel Height
+
+   Maximum width of targets (3 a 7)
+
+Min-Max Num Pixel
+
+   Maximum width of targets (10 a 100)
+
+Min Pixel Density
+
+   Density inside bounding box of target black island (0.5)
+
+Angle Tolerance
+
+   Found targets need to be at a certain tolerance range
+
+Min Side
+
+   Target distance
+
+Target Radius
+        
+   
+Correct Side Ratio
+
+   Side of the targets
+
+Phase
+
+   Page orientation 0=Standing 1,2,3 90-degree clockwise rotations
+
+Control Point Radius
+
+   Radius of the control points
+
+Gap Level
+
+   ???
+
+Separation Level
+
+   ??? To be considered a marked cell intensity needs to be below this number
+
+Left, Right, Top, Bottom Margins
+
+   
+
+      

@@ -1,0 +1,11 @@
+/bin
+.classpath
+.project
+*.class
+*.prova
+*.data
+*.lck
+*.ctrl
+*.list
+*.log
+/src/db/
