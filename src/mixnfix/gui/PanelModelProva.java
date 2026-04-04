@@ -335,6 +335,7 @@ public class PanelModelProva extends JPanel {
                     popup.add(new JMenuItem(new MFActionLockNoProvaPermutavel(grupo)));
                     popup.add(new JMenuItem(new MFActionAdicionarGrupo(grupo)));
                     popup.add(new JMenuItem(new MFActionAdicionarQuesito(grupo)));
+                    popup.add(new JMenuItem(new MFActionImportarQuesitoDoBanco(grupo)));
                     popup.add(new JMenuItem(new MFActionCopyModelToClipboard(grupo)));
                     popup.add(new JMenuItem(new MFActionPasteModelOnClipboard(grupo)));
                     popup.add(new JMenuItem(new MFActionRemoverGrupo(grupo)));
@@ -349,6 +350,7 @@ public class PanelModelProva extends JPanel {
                     popup.add(new JMenuItem(new MFActionLockNoProvaPermutavel(grupo)));
                     popup.add(new JMenuItem(new MFActionAdicionarGrupo(grupo)));
                     popup.add(new JMenuItem(new MFActionAdicionarQuesito(grupo)));
+                    popup.add(new JMenuItem(new MFActionImportarQuesitoDoBanco(grupo)));
                     popup.add(new JMenuItem(new MFActionSetDefaultTags(provaStructure)));
                     popup.add(new JMenuItem(new MFActionSetPrefixoNumericoNosTagsDosQuesitos(provaStructure)));
                     popup.add(new JMenuItem(new MFActionTrocarValorAcertoDeTodosOsQuesitos(provaStructure)));
@@ -363,6 +365,7 @@ public class PanelModelProva extends JPanel {
                     popup.add(new JMenuItem(new MFActionTrocarValorAcerto(quesito)));
                     popup.add(new JMenuItem(new MFActionRemoverQuesito(quesito)));
                     popup.add(new JMenuItem(new MFActionCopyModelToClipboard(quesito)));
+                    popup.add(new JMenuItem(new MFActionSalvarQuesitoNoBanco(quesito)));
                     popup.add(new JMenuItem(new MFActionChangeQuesitoValues(quesito)));
                     popup.add(new JMenuItem(new MFActionMoverPraFrente(quesito)));
                     popup.add(new JMenuItem(new MFActionMoverPraTras(quesito)));

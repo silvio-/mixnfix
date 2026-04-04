@@ -3,6 +3,7 @@ package mixnfix.gui;
 import java.util.List;
 
 import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.TreePath;
 
 import mixnfix.Model;
 import mixnfix.ModelListener;
@@ -141,6 +142,7 @@ public class MFTreeNode
         if (getAction(type) == ADD_ACTION) {
             MFTreeNode tn = new MFTreeNode(_tree,child, type, _treeModel);
             _treeModel.insertNodeInto(tn, this, index);
+            _tree.expandPath(new TreePath(this.getPath()));
         }
     }
 

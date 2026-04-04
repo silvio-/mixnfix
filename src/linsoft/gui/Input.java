@@ -27,7 +27,16 @@ public class Input extends JTextField {
         _propertyName = propertyName;
         _defaultValue = defaultValue;
         _type = type;
-        this.setPreferredSize(new Dimension(width,(int)this.getPreferredSize().getHeight()));
+        Dimension d = new Dimension(width, (int) this.getPreferredSize().getHeight());
+        this.setPreferredSize(d);
+        // Without this, minimumSize stays at the L&F default (~5px — just border
+        // insets for a 0-column JTextField). GridBagLayout with weightx=0 snaps
+        // straight to minimum the instant the container is even 1px too narrow
+        // for preferred, collapsing the field to an invisible sliver. On Windows
+        // L&F this never triggered because Tahoma rendered labels narrower; on
+        // Linux Metal the wider labels tip dialogs like PanelProduzirProva over
+        // the edge.
+        this.setMinimumSize(d);
         String value = _repository.getProperty(_propertyName);
         if (value == null || "".equals(value)) {
             _repository.setProperty(_propertyName, _defaultValue);

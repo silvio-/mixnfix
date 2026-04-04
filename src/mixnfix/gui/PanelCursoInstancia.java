@@ -140,11 +140,8 @@ public class PanelCursoInstancia extends JPanel {
                 System.out.println("Gerando relatório " + f.getAbsolutePath() + "...");
                 _modelCursoInstancia.gerarRelatorio(f.getAbsolutePath());
 
-                //Process process = Runtime.getRuntime().exec("C:/Program Files/Adobe/Acrobat 6.0/Reader/AcroRd32.exe " + f.getAbsolutePath());
-                String command = "C:/Program Files/Microsoft Office/Office10/EXCEL.EXE \"" + f.getAbsolutePath() + "\"";
-                System.out.println(command);
-                Process process = Runtime.getRuntime().exec(command);
-                //process.waitFor();
+                String command = App.getConfiguracao().getCommandOpenXLS(f.getAbsolutePath());
+                mixnfix.Library.executeCommand(command, false);
             }
             catch (Exception ex) {
                 ex.printStackTrace();

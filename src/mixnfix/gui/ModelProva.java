@@ -446,7 +446,28 @@ public class ModelProva extends Model {
         hd.endElement("","","prova");
     }
 
-    private void xml_produceNode(NoProva n, TransformerHandler hd) throws SAXException {
+    /**
+     * Serialize a single Quesito as a standalone &lt;prova&gt; XML document
+     * so that {@link mixnfix.prova.Parser} can round-trip it.
+     * Used by the question bank (banco de questões).
+     */
+    static void gerarXMLQuesito(Quesito q, PrintWriter out) throws Exception {
+        StreamResult streamResult = new StreamResult(out);
+        SAXTransformerFactory tf = (SAXTransformerFactory) SAXTransformerFactory.newInstance();
+        TransformerHandler hd = tf.newTransformerHandler();
+        Transformer serializer = hd.getTransformer();
+        serializer.setOutputProperty(OutputKeys.ENCODING,"UTF-8");
+        serializer.setOutputProperty(OutputKeys.INDENT,"no");
+        hd.setResult(streamResult);
+        hd.startDocument();
+        AttributesImpl atts = new AttributesImpl();
+        hd.startElement("","","prova",atts);
+        xml_produceNode(q, hd);
+        hd.endElement("","","prova");
+        hd.endDocument();
+    }
+
+    static void xml_produceNode(NoProva n, TransformerHandler hd) throws SAXException {
         if (n instanceof Grupo) {
             Grupo g = (Grupo) n;
 
@@ -501,7 +522,7 @@ public class ModelProva extends Model {
         }
     }
 
-    private void xml_producePapel(Papel p, TransformerHandler hd) throws SAXException {
+    static void xml_producePapel(Papel p, TransformerHandler hd) throws SAXException {
         if (p == null)
             return;
 

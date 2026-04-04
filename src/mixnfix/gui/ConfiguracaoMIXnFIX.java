@@ -22,7 +22,7 @@ public class ConfiguracaoMIXnFIX extends Configuracao {
     static { _mapDefaults.put(openPDF,"evince $pdffile");}
     
     public static final String openXLS = "openXLS";
-    static { _mapDefaults.put(openXLS,"oofice $xlsfile");}
+    static { _mapDefaults.put(openXLS,"soffice $xlsfile");}
 
     public static final String openHTML = "openHTML";
     static { _mapDefaults.put(openHTML,"firefox $htmlfile");}
@@ -31,10 +31,13 @@ public class ConfiguracaoMIXnFIX extends Configuracao {
     static { _mapDefaults.put(convertEPS2PDF,"epstopdf $pdffile");}
     
     public static final String compileTEX2PDF = "compileTEX2PDF";
-    static { _mapDefaults.put(compileTEX2PDF,"pdflatex -halt-on-error\n   -include-directory=$sourcedir\n   -output-directory=$outputdir\n   -aux-directory=$sourcedir\n   $texfile");}
+    // TeX Live pdflatex. TEXINPUTS is set by the caller so $sourcedir is searched for inputs.
+    static { _mapDefaults.put(compileTEX2PDF,"pdflatex -halt-on-error -interaction=nonstopmode -output-directory=$outputdir $texfile");}
 
     public static final String triangulate = "triangulate";
-    static { _mapDefaults.put(triangulate,"t $file");}
+    // Shewchuk's Triangle: install via `apt install triangle-bin` or build from
+    // https://www.cs.cmu.edu/~quake/triangle.html (gcc -O2 -DLINUX -o triangle triangle.c -lm)
+    static { _mapDefaults.put(triangulate,"triangle $file");}
     
     public static final String estatisticaPorQuestaoDirReport = "estatisticaPorQuestaoDirReport";
     static { _mapDefaults.put(estatisticaPorQuestaoDirReport,"."); }    
@@ -55,7 +58,10 @@ public class ConfiguracaoMIXnFIX extends Configuracao {
     static { _mapDefaults.put(arquivoExportacaoAluno,"alunos.txt"); }  
 
     public static final String datadir = "datadir";
-    static { _mapDefaults.put(datadir,"data"); }    
+    static { _mapDefaults.put(datadir,"data"); }
+
+    public static final String bancoquesitosdir = "bancoquesitosdir";
+    static { _mapDefaults.put(bancoquesitosdir,"banco"); }
 
     public static final String dbname = "dbname";
     static { _mapDefaults.put(dbname,"db"); }    

@@ -1467,6 +1467,200 @@ class MFActionPasteModelOnClipboard
     }
 }
 
+/**
+ * Salvar um quesito como arquivo .quesito (zip de quesito.xml + imagens)
+ * no banco de questões para reuso em provas futuras.
+ */
+class MFActionSalvarQuesitoNoBanco
+    extends AbstractAction {
+    private Quesito _quesito;
+
+    public MFActionSalvarQuesitoNoBanco(Quesito q) {
+        super("Salvar no Banco de Questões", Images.Quesito);
+        _quesito = q;
+    }
+
+    public void actionPerformed(ActionEvent e) {
+        try {
+            hardwork();
+        }
+        catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(MainFrame.MAIN_FRAME, "Erro ao salvar quesito: " + ex.getMessage());
+        }
+    }
+
+    private void hardwork() throws Exception {
+        // nome do arquivo (default = tag do quesito, limpo de chars inválidos)
+        String sugestao = _quesito.getTag();
+        if (sugestao != null)
+            sugestao = sugestao.replaceAll("[^a-zA-Z0-9._ -]", "_").trim();
+        Object o = JOptionPane.showInputDialog(MainFrame.MAIN_FRAME, "Nome do arquivo (sem extensão):", sugestao);
+        if (o == null)
+            return;
+        String nome = ((String) o).trim();
+        if (nome.isEmpty())
+            return;
+
+        File bancoDir = new File(App.getConfiguracao().getProperty(ConfiguracaoMIXnFIX.bancoquesitosdir));
+        bancoDir.mkdirs();
+        File outFile = new File(bancoDir, nome + ".quesito");
+        if (outFile.exists()) {
+            int code = JOptionPane.showConfirmDialog(MainFrame.MAIN_FRAME,
+                "Já existe " + outFile.getName() + ". Sobrescrever?", "Confirmar", JOptionPane.YES_NO_OPTION);
+            if (code != JOptionPane.YES_OPTION)
+                return;
+        }
+
+        // a prova-mãe guarda o diretório temp onde as imagens estão descompactadas
+        ModelProva mp = (ModelProva) _quesito.getAscendentByClass(ModelProva.class);
+        File sourcePath = mp.getPath();
+
+        // coletar nomes de imagens referenciadas por este quesito
+        List<String> imageNames = collectImageNames(_quesito);
+
+        // montar num diretório temporário e zipar
+        File tmpDir = new File(Controller.TMP_DIR, "__mixnfix_banco_" + System.currentTimeMillis());
+        tmpDir.mkdirs();
+        try {
+            PrintWriter pw = new PrintWriter(new File(tmpDir, "quesito.xml"), "UTF-8");
+            ModelProva.gerarXMLQuesito(_quesito, pw);
+            pw.flush();
+            pw.close();
+
+            for (String img : imageNames) {
+                Library.copyFile(new File(sourcePath, img), new File(tmpDir, img));
+            }
+
+            ArrayList<String> names = new ArrayList<String>(imageNames);
+            names.add("quesito.xml");
+            Controller.zipFiles(tmpDir, names, outFile.getAbsolutePath());
+        }
+        finally {
+            for (File f : tmpDir.listFiles()) f.delete();
+            tmpDir.delete();
+        }
+
+        JOptionPane.showMessageDialog(MainFrame.MAIN_FRAME, "Quesito salvo em: " + outFile.getAbsolutePath());
+    }
+
+    static List<String> collectImageNames(Quesito q) {
+        ArrayList<String> names = new ArrayList<String>();
+        ArrayList<Papel> papeis = new ArrayList<Papel>();
+        if (q.getEnunciado() != null) papeis.add(q.getEnunciado());
+        if (q.getSolucao() != null) papeis.add(q.getSolucao());
+        for (Model child : q.getChilds()) {
+            ItemQuesito iq = (ItemQuesito) child;
+            if (iq.getEnunciado() != null) papeis.add(iq.getEnunciado());
+        }
+        for (Papel p : papeis) {
+            for (Model m : p.getContents()) {
+                if (m instanceof Imagem) {
+                    String src = ((Imagem) m).getProperty("src");
+                    if (src != null) {
+                        String name = new File(src).getName();
+                        if (!names.contains(name)) names.add(name);
+                    }
+                }
+            }
+        }
+        return names;
+    }
+}
+
+/**
+ * Importar um quesito do banco de questões e inseri-lo no grupo selecionado.
+ */
+class MFActionImportarQuesitoDoBanco
+    extends AbstractAction {
+    private Grupo _grupo;
+
+    public MFActionImportarQuesitoDoBanco(Grupo g) {
+        super("Importar do Banco de Questões", Images.Quesito);
+        _grupo = g;
+    }
+
+    public void actionPerformed(ActionEvent e) {
+        try {
+            hardwork();
+        }
+        catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(MainFrame.MAIN_FRAME, "Erro ao importar quesito: " + ex.getMessage());
+        }
+    }
+
+    private void hardwork() throws Exception {
+        File bancoDir = new File(App.getConfiguracao().getProperty(ConfiguracaoMIXnFIX.bancoquesitosdir));
+        if (!bancoDir.isDirectory()) {
+            JOptionPane.showMessageDialog(MainFrame.MAIN_FRAME, "Banco de questões vazio (" + bancoDir.getAbsolutePath() + ")");
+            return;
+        }
+
+        ArrayList<String> opts = new ArrayList<String>();
+        for (File f : bancoDir.listFiles()) {
+            if (f.isFile() && f.getName().endsWith(".quesito"))
+                opts.add(f.getName().substring(0, f.getName().length() - ".quesito".length()));
+        }
+        if (opts.isEmpty()) {
+            JOptionPane.showMessageDialog(MainFrame.MAIN_FRAME, "Banco de questões vazio (" + bancoDir.getAbsolutePath() + ")");
+            return;
+        }
+        Collections.sort(opts);
+
+        Object sel = JOptionPane.showInputDialog(MainFrame.MAIN_FRAME, "Escolha o quesito:", "Banco de Questões",
+            JOptionPane.PLAIN_MESSAGE, null, opts.toArray(), opts.get(0));
+        if (sel == null)
+            return;
+
+        File quesitoFile = new File(bancoDir, sel + ".quesito");
+        File tmpDir = new File(Controller.TMP_DIR, "__mixnfix_banco_" + System.currentTimeMillis());
+        tmpDir.mkdirs();
+        try {
+            Controller.unzip(quesitoFile.getAbsolutePath(), tmpDir.getAbsolutePath());
+
+            mixnfix.prova.Parser parser = new mixnfix.prova.Parser(new File(tmpDir, "quesito.xml").getAbsolutePath());
+            ArrayList<Quesito> qs = parser.getProva().getQuesitos();
+            if (qs.isEmpty()) {
+                JOptionPane.showMessageDialog(MainFrame.MAIN_FRAME, "Arquivo não contém quesito.");
+                return;
+            }
+            Quesito q = qs.get(0).getCopy();
+
+            // copiar imagens para o diretório de trabalho da prova destino,
+            // renomeando em caso de colisão (atualiza o src no modelo)
+            ModelProva mpTarget = (ModelProva) _grupo.getAscendentByClass(ModelProva.class);
+            ArrayList<Papel> papeis = new ArrayList<Papel>();
+            if (q.getEnunciado() != null) papeis.add(q.getEnunciado());
+            if (q.getSolucao() != null) papeis.add(q.getSolucao());
+            for (Model child : q.getChilds()) {
+                ItemQuesito iq = (ItemQuesito) child;
+                if (iq.getEnunciado() != null) papeis.add(iq.getEnunciado());
+            }
+            for (Papel p : papeis) {
+                for (Model m : p.getContents()) {
+                    if (m instanceof Imagem) {
+                        Imagem img = (Imagem) m;
+                        String src = img.getProperty("src");
+                        if (src == null) continue;
+                        String name = new File(src).getName();
+                        String fresh = mpTarget.assureImageFileName(name);
+                        Library.copyFile(new File(tmpDir, name), new File(mpTarget.getPath(), fresh));
+                        img.setProperty("src", fresh);
+                    }
+                }
+            }
+
+            _grupo.addQuesito(q);
+            q.fireInitStructure();
+        }
+        finally {
+            for (File f : tmpDir.listFiles()) f.delete();
+            tmpDir.delete();
+        }
+    }
+}
+
 class MFActionProduzirProva
     extends AbstractAction {
     ModelProva _model;

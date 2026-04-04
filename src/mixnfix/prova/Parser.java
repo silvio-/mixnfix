@@ -33,9 +33,19 @@ public class Parser extends DefaultHandler implements Tags {
         javax.xml.parsers.SAXParserFactory spf = javax.xml.parsers.SAXParserFactory.newInstance();
         javax.xml.parsers.SAXParser sp = spf.newSAXParser();
         org.xml.sax.InputSource is = new org.xml.sax.InputSource(new java.io.FileInputStream(arq));
-        
-        // commented on Apr. 26, 2013
-        is.setEncoding("UTF-8");
+
+        // Encoding handling:
+        //   - Normally leave encoding unset: SAX auto-detects from the XML prolog,
+        //     so modern UTF-8 provas and well-declared iso-8859-1 ones both parse.
+        //   - BUT: many pre-2013 provas declare encoding="ASCII" while actually
+        //     containing Latin-1 bytes (0xE7 for ç in <cabeçalho> etc.). That is
+        //     malformed XML and the JDK-11 SAX parser rightly rejects it. Peek at
+        //     the prolog and override only that known lie. ISO-8859-1 is a strict
+        //     superset of ASCII so this is always safe.
+        String declared = sniffDeclaredEncoding(arq);
+        if (declared != null && declared.equalsIgnoreCase("ASCII")) {
+            is.setEncoding("ISO-8859-1");
+        }
 
         // ParserHandler h = new ParserHandler();
 
@@ -274,6 +284,34 @@ public class Parser extends DefaultHandler implements Tags {
             }
         }
         return e;
+    }
+
+    /**
+     * Read the first few bytes of the file and extract the encoding
+     * value from the &lt;?xml ... encoding="X"?&gt; prolog, if present.
+     * Bytes are read as Latin-1 so any byte sequence decodes losslessly.
+     */
+    private static String sniffDeclaredEncoding(String arq) {
+        java.io.FileInputStream in = null;
+        try {
+            in = new java.io.FileInputStream(arq);
+            byte[] buf = new byte[256];
+            int n = in.read(buf);
+            if (n <= 0) return null;
+            String head = new String(buf, 0, n, "ISO-8859-1");
+            int end = head.indexOf("?>");
+            if (end < 0) return null;
+            head = head.substring(0, end);
+            int i = head.indexOf("encoding");
+            if (i < 0) return null;
+            int q1 = head.indexOf('"', i);
+            if (q1 < 0) { q1 = head.indexOf('\'', i); if (q1 < 0) return null; }
+            int q2 = head.indexOf(head.charAt(q1), q1 + 1);
+            if (q2 < 0) return null;
+            return head.substring(q1 + 1, q2);
+        }
+        catch (IOException e) { return null; }
+        finally { if (in != null) try { in.close(); } catch (IOException e) {} }
     }
 
     private Grupo processGrupo(ParserNode n) {

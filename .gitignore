@@ -9,3 +9,9 @@
 *.list
 *.log
 /src/db/
+jdk/
+bin/
+db/
+data/
+*.rar
+*.zip
