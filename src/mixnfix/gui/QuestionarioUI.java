@@ -21,7 +21,7 @@ import mixnfix.folharesposta.ControlPoint;
 import mixnfix.folharesposta.FabricaDeFolhaDeResposta;
 import mixnfix.folharesposta.IFolhaResposta;
 import mixnfix.folharesposta.OptionField;
-import mixnfix.folharesposta.Triangle;
+import mixnfix.folharesposta.Quadrilateral;
 import mixnfix.prova.ItemQuesito;
 import mixnfix.prova.Quesito;
 
@@ -77,17 +77,22 @@ public class QuestionarioUI {
             cp.setImageXY(cps[2 * cp.getId()], cps[2 * cp.getId() + 1]);
         }
 
+        // Now that every control point has its practical (image) position,
+        // compute the projective homography of each quad in the piecewise
+        // projective grid before mapping any cell position.
+        _cellMapFixo.computeQuadHomographies();
+
         for (Cell cell : _cellMapFixo.getCells()) {
             double mapping[] = {0,0};
-            if (!_cellMapFixo.getImageCoordinateByTriangulation(cell.getX(),cell.getY(),mapping))
-                throw new RuntimeException("Triang. Problem!");
+            if (!_cellMapFixo.getImageCoordinateByQuads(cell.getX(),cell.getY(),mapping))
+                throw new RuntimeException("Quad mapping problem!");
             cell.setImageXY(mapping[0],mapping[1]);
         }
 
         for (Cell cell : _cellMapVariavel.getCells()) {
             double mapping[] = {0,0};
-            if (!_cellMapFixo.getImageCoordinateByTriangulation(cell.getX(),cell.getY(),mapping))
-                throw new RuntimeException("Triang. Problem!");
+            if (!_cellMapFixo.getImageCoordinateByQuads(cell.getX(),cell.getY(),mapping))
+                throw new RuntimeException("Quad mapping problem!");
             cell.setImageXY(mapping[0],mapping[1]);
         }
         // --------------------------------------------------------------------
@@ -210,11 +215,12 @@ public class QuestionarioUI {
             }
             g.drawImage(_image,0,0,null);
 
-            for (Triangle t : _cellMapFixo.getTriangulation()) {
+            for (Quadrilateral q : _cellMapFixo.getQuads()) {
                 GeneralPath shape = new GeneralPath();
-                shape.moveTo(t.getP1().getImageX(), t.getP1().getImageY());
-                shape.lineTo(t.getP2().getImageX(), t.getP2().getImageY());
-                shape.lineTo(t.getP3().getImageX(), t.getP3().getImageY());
+                shape.moveTo(q.getP0().getImageX(), q.getP0().getImageY());
+                shape.lineTo(q.getP1().getImageX(), q.getP1().getImageY());
+                shape.lineTo(q.getP2().getImageX(), q.getP2().getImageY());
+                shape.lineTo(q.getP3().getImageX(), q.getP3().getImageY());
                 shape.closePath();
                 g2.setColor(new Color(0.0f,0.0f,1.0f,0.5f));
                 g2.draw(shape);

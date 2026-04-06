@@ -293,7 +293,7 @@ public class ProcessImage {
 		   this.x = x;
 		   this.y = y;
 	   }
-		
+
 	   int id;         // identification of control point
 	   double x,y;      // theorical location of control point
 
@@ -301,45 +301,28 @@ public class ProcessImage {
 	   Region region; // region that was used as the
 	}
 
-	public static class Triangle {
-		public Triangle(
-			ControlPoint p1,
-			ControlPoint p2,
-			ControlPoint p3 ) {
+	/**
+	 * A quadrilateral defined by four control points (theoretical order:
+	 * TL, TR, BR, BL) with a precomputed projective homography mapping
+	 * from theoretical to practical (image) coordinates.
+	 *
+	 * The homography is parameterized on the unit square u,v in [0,1]x[0,1]
+	 * spanning the quad's theoretical axis-aligned bounding box.
+	 * Coefficients satisfy:
+	 *   xx = (ha*u + hb*v + hc) / (hg*u + hh*v + 1)
+	 *   yy = (hd*u + he*v + hf) / (hg*u + hh*v + 1)
+	 */
+	public static class Quad {
+		public ControlPoint p0, p1, p2, p3; // TL, TR, BR, BL in theoretical order
+		public double ha, hb, hc, hd, he, hf, hg, hh;
+		public double minX, maxX, minY, maxY; // theoretical bounding box
+		public boolean valid;
+
+		public Quad(ControlPoint p0, ControlPoint p1, ControlPoint p2, ControlPoint p3) {
+			this.p0 = p0;
 			this.p1 = p1;
 			this.p2 = p2;
 			this.p3 = p3;
-			this.whiteSampleSet = 0;
-		}
-
-		public ControlPoint getP1() { return p1; }
-		public ControlPoint getP2() { return p2; }
-		public ControlPoint getP3() { return p3; }
-
-	   // specification of a cell
-	   ControlPoint p1, p2, p3;
-
-	   int whiteSampleSet; // unsigned char whiteSampleSet;
-	}
-
-	/**
-	 * A quadrilateral defined by 4 control points with a precomputed
-	 * projective homography mapping from theoretical to practical coordinates.
-	 */
-	public static class Quad {
-		ControlPoint p0, p1, p2, p3; // TL, TR, BR, BL in theoretical coords
-		// Precomputed homography coefficients (theoretical -> practical)
-		double ha, hb, hc, hd, he, hf, hg, hh;
-		// Theoretical bounding box (axis-aligned in theoretical space)
-		double minX, maxX, minY, maxY;
-		// Flag: true if the homography is valid (non-degenerate)
-		boolean valid;
-
-		public Quad(ControlPoint p0, ControlPoint p1, ControlPoint p2, ControlPoint p3) {
-			this.p0 = p0; // TL
-			this.p1 = p1; // TR
-			this.p2 = p2; // BR
-			this.p3 = p3; // BL
 			this.minX = Math.min(Math.min(p0.x, p1.x), Math.min(p2.x, p3.x));
 			this.maxX = Math.max(Math.max(p0.x, p1.x), Math.max(p2.x, p3.x));
 			this.minY = Math.min(Math.min(p0.y, p1.y), Math.min(p2.y, p3.y));
@@ -347,25 +330,29 @@ public class ProcessImage {
 			this.valid = false;
 		}
 
+		public ControlPoint getP0() { return p0; }
+		public ControlPoint getP1() { return p1; }
+		public ControlPoint getP2() { return p2; }
+		public ControlPoint getP3() { return p3; }
+
 		/**
-		 * Compute projective homography coefficients that map unit square
-		 * [0,1]x[0,1] to the practical (xx,yy) positions of the 4 corners.
-		 * Call this after control point practical positions are established.
-		 * Sets valid=false if the quad is degenerate (e.g., collapsed corners).
+		 * Compute the projective homography that sends the unit square
+		 * (u,v) in [0,1]x[0,1] to the practical (xx,yy) positions of the
+		 * 4 corners in the order TL(0,0), TR(1,0), BR(1,1), BL(0,1).
+		 * Must be called after control-point practical positions are set.
 		 */
 		public void computeHomography() {
-			double x0 = p0.xx, y0 = p0.yy; // TL practical
-			double x1 = p1.xx, y1 = p1.yy; // TR practical
-			double x2 = p2.xx, y2 = p2.yy; // BR practical
-			double x3 = p3.xx, y3 = p3.yy; // BL practical
+			double x0 = p0.xx, y0 = p0.yy; // TL
+			double x1 = p1.xx, y1 = p1.yy; // TR
+			double x2 = p2.xx, y2 = p2.yy; // BR
+			double x3 = p3.xx, y3 = p3.yy; // BL
 
 			double dx1 = x1 - x2, dy1 = y1 - y2;
 			double dx2 = x3 - x2, dy2 = y3 - y2;
 			double dx3 = x0 - x1 + x2 - x3, dy3 = y0 - y1 + y2 - y3;
 
 			double det = dx1 * dy2 - dy1 * dx2;
-
-			if (Math.abs(det) < 1.0e-10) {
+			if (Math.abs(det) < 1.0e-12) {
 				valid = false;
 				return;
 			}
@@ -373,8 +360,7 @@ public class ProcessImage {
 			hg = (dx3 * dy2 - dy3 * dx2) / det;
 			hh = (dx1 * dy3 - dy1 * dx3) / det;
 
-			// Check that w = hg*u + hh*v + 1 > 0 at all 4 unit square corners.
-			// w(0,0)=1, w(1,0)=hg+1, w(0,1)=hh+1, w(1,1)=hg+hh+1
+			// w must stay positive over the whole unit square
 			double wMin = Math.min(Math.min(1.0, hg + 1.0),
 			                       Math.min(hh + 1.0, hg + hh + 1.0));
 			if (wMin < 1.0e-6) {
@@ -392,7 +378,8 @@ public class ProcessImage {
 		}
 
 		/**
-		 * Check if theoretical point (x,y) is inside this quad's bounding box.
+		 * True if the theoretical point (x,y) is inside (with EPSILON slack)
+		 * the axis-aligned bounding box of the quad.
 		 */
 		public boolean contains(double x, double y) {
 			return x >= minX - EPSILON && x <= maxX + EPSILON &&
@@ -400,8 +387,9 @@ public class ProcessImage {
 		}
 
 		/**
-		 * Map a theoretical point (x,y) to practical pixel coordinates.
-		 * Uses projective homography if valid, otherwise bilinear fallback.
+		 * Map a theoretical point (x,y) to practical (image) coordinates
+		 * using this quad's homography. The output is written to
+		 * output[offset], output[offset+1].
 		 */
 		public void map(double x, double y, double[] output, int offset) {
 			double u = (x - minX) / (maxX - minX);
@@ -412,7 +400,8 @@ public class ProcessImage {
 				output[offset]     = (ha * u + hb * v + hc) / w;
 				output[offset + 1] = (hd * u + he * v + hf) / w;
 			} else {
-				// Bilinear fallback for degenerate quads
+				// Bilinear fallback for degenerate quads (should not happen
+				// for a well-formed control-point grid).
 				output[offset]     = (1-u)*(1-v)*p0.xx + u*(1-v)*p1.xx + u*v*p2.xx + (1-u)*v*p3.xx;
 				output[offset + 1] = (1-u)*(1-v)*p0.yy + u*(1-v)*p1.yy + u*v*p2.yy + (1-u)*v*p3.yy;
 			}
@@ -424,22 +413,19 @@ public class ProcessImage {
 		double height;          // height of the map
 
 		int numControlPoints;  // number of control points
-		ControlPoint cps[];     // control points (a corner does not appear here)
+		ControlPoint cps[];    // control points (a corner does not appear here)
 
-		int numTriangles;      // number of triangles
-		Triangle triangles[];  // triangles
-
-		int numQuads;          // number of quads
+		int numQuads;          // number of quadrilaterals
 		Quad quads[];          // quads for piecewise projective mapping
 
 		int numCells;          // number of cells
 		Cell cells[];          // cells
 
-		
-		public int getNumberOfTriangles() {
-			return numTriangles;
+
+		public int getNumberOfQuads() {
+			return numQuads;
 		}
-		
+
 		public int getNumberOfCells() {
 			return numCells;
 		}
@@ -447,11 +433,11 @@ public class ProcessImage {
 		public int getNumberOfControlPoints() {
 			return numControlPoints;
 		}
-		
-		public Triangle getTriangle(int index) {
-			return triangles[index];
+
+		public Quad getQuad(int index) {
+			return quads[index];
 		}
-		
+
 		public ControlPoint addControlPoint(int id, double x, double y) {
 			ControlPoint cp = new ControlPoint(id,x,y);
 			this.cps[this.numControlPoints] = cp;
@@ -459,47 +445,124 @@ public class ProcessImage {
 			return cp;
 		}
 
-		public Triangle addTriangle(int cp1, int cp2, int cp3) {
-	    	ControlPoint p1=null, p2=null, p3=null;
-			
-	    	int k=0;
+		/**
+		 * Add a quadrilateral by referencing control point ids.
+		 * The four control points must be given in theoretical order
+		 * TL, TR, BR, BL (clockwise starting from the top-left corner).
+		 */
+		public Quad addQuad(int cp0, int cp1, int cp2, int cp3) {
+			ControlPoint q0=null, q1=null, q2=null, q3=null;
+			int k=0;
 			for (int i=0;i<this.numControlPoints;i++) {
-	    		ControlPoint p = this.cps[i];
-	            if (cp1 == p.id) { p1 = p; k++; }
-	            if (cp2 == p.id) { p2 = p; k++; }
-	            if (cp3 == p.id) { p3 = p; k++;}
-	    	}
-	    	
-	        if (k < 3)
-	            System.out.print(String.format("Problema com triangulo %d %d %d\n",cp1,cp2,cp3));     
+				ControlPoint p = this.cps[i];
+				if (cp0 == p.id) { q0 = p; k++; }
+				if (cp1 == p.id) { q1 = p; k++; }
+				if (cp2 == p.id) { q2 = p; k++; }
+				if (cp3 == p.id) { q3 = p; k++; }
+			}
 
-	        Triangle t = new Triangle(p1,p2,p3);
-	        this.triangles[this.numTriangles] = t;
-	        this.numTriangles++;
-	        return t;
+			if (k < 4)
+				System.out.print(String.format("Problema com quad %d %d %d %d\n",cp0,cp1,cp2,cp3));
+
+			Quad q = new Quad(q0,q1,q2,q3);
+			this.quads[this.numQuads] = q;
+			this.numQuads++;
+			return q;
 		}
-		
+
+		/**
+		 * Recompute the homography coefficients of every quad.
+		 * Call this after the practical (xx,yy) positions of all control
+		 * points are known (i.e. after findControlPoints succeeds).
+		 */
+		public void computeQuadHomographies() {
+			for (int i=0;i<numQuads;i++)
+				quads[i].computeHomography();
+		}
+
+		/**
+		 * Build the piecewise-projective quad grid from the current
+		 * control points using their theoretical (x,y) positions.
+		 * Control points are grouped into columns by their x coordinate
+		 * (within EPSILON) and into rows by their y coordinate; quads are
+		 * then formed between pairs of adjacent columns and consecutive
+		 * rows in the order TL, TR, BR, BL.
+		 *
+		 * The resulting quads have no homography yet - call
+		 * {@link #computeQuadHomographies()} after practical positions
+		 * are known.
+		 */
+		public void buildQuadsFromGrid() {
+			numQuads = 0;
+
+			java.util.TreeSet<Double> xSet = new java.util.TreeSet<Double>();
+			for (int i=0;i<numControlPoints;i++)
+				xSet.add(cps[i].x);
+
+			double[] xValues = new double[xSet.size()];
+			int xi = 0;
+			for (double xv : xSet)
+				xValues[xi++] = xv;
+
+			int numCols = xValues.length;
+			if (numCols < 2)
+				return;
+
+			ControlPoint[][] grid = new ControlPoint[numCols][];
+			for (int col = 0; col < numCols; col++) {
+				java.util.ArrayList<ControlPoint> colPoints = new java.util.ArrayList<ControlPoint>();
+				for (int i = 0; i < numControlPoints; i++) {
+					if (Math.abs(cps[i].x - xValues[col]) < EPSILON)
+						colPoints.add(cps[i]);
+				}
+				colPoints.sort((a, b) -> Double.compare(a.y, b.y));
+				grid[col] = colPoints.toArray(new ControlPoint[0]);
+			}
+
+			for (int col = 0; col < numCols - 1; col++) {
+				int numRows = Math.min(grid[col].length, grid[col + 1].length);
+				for (int row = 0; row < numRows - 1; row++) {
+					Quad q = new Quad(
+						grid[col][row],          // p0 = TL
+						grid[col + 1][row],      // p1 = TR
+						grid[col + 1][row + 1],  // p2 = BR
+						grid[col][row + 1]       // p3 = BL
+					);
+					if (numQuads >= quads.length) {
+						Quad[] resized = new Quad[quads.length * 2 + 1];
+						System.arraycopy(quads, 0, resized, 0, numQuads);
+						quads = resized;
+					}
+					quads[numQuads++] = q;
+				}
+			}
+		}
+
 		public CellMap(String fileName) throws IOException {
 			BufferedReader br = new BufferedReader(new FileReader(fileName));
 
-			int numCells, numControlPoints, numTriangles;
+			int nCells, nControlPoints, nQuads;
 			double W,H;
 			String tokens[];
 
 			// read first line
 			tokens= br.readLine().split(" ");
-			numCells = Integer.parseInt(tokens[0]);
-			numControlPoints = Integer.parseInt(tokens[1]);
-			numTriangles = Integer.parseInt(tokens[2]);
+			nCells = Integer.parseInt(tokens[0]);
+			nControlPoints = Integer.parseInt(tokens[1]);
+			nQuads = Integer.parseInt(tokens[2]);
 
 			// read second line
 			tokens= br.readLine().split(" ");
 			W = Double.parseDouble(tokens[0]);
 			H = Double.parseDouble(tokens[1]);
 
+			this.width = W;
+			this.height = H;
+
 			// control points
-			cps = new ControlPoint[numControlPoints];
-			for (int i=0;i<numControlPoints;i++) {
+			cps = new ControlPoint[nControlPoints];
+			numControlPoints = nControlPoints;
+			for (int i=0;i<nControlPoints;i++) {
 				tokens = br.readLine().split(" ");
 				cps[i] = new ControlPoint(
 						Integer.parseInt(tokens[0]),   // id
@@ -508,17 +571,23 @@ public class ProcessImage {
 				);
 			}
 
-			// triangles 
-			for (int i=0;i<numTriangles;i++) {
+			// quads
+			quads = new Quad[nQuads];
+			numQuads = 0;
+			for (int i=0;i<nQuads;i++) {
 				tokens = br.readLine().split(" ");
-				triangles[i] = new Triangle(
-						cps[Integer.parseInt(tokens[0])-1],
-						cps[Integer.parseInt(tokens[1])-1],
-						cps[Integer.parseInt(tokens[2])-1]);
-			}		   
+				addQuad(
+					Integer.parseInt(tokens[0]),
+					Integer.parseInt(tokens[1]),
+					Integer.parseInt(tokens[2]),
+					Integer.parseInt(tokens[3])
+				);
+			}
 
-			// cellmap 
-			for (int i=0;i<numCells;i++) {
+			// cells
+			cells = new Cell[nCells];
+			numCells = nCells;
+			for (int i=0;i<nCells;i++) {
 				tokens = br.readLine().split(" ");
 				cells[i] = new Cell(
 						Integer.parseInt(tokens[0]), // id
@@ -528,70 +597,18 @@ public class ProcessImage {
 						Double.parseDouble(tokens[7]), Double.parseDouble(tokens[8]), // w3 h3
 						Integer.parseInt(tokens[9]) // whiteSampleSet
 				);
-			}		   
+			}
 		}
 
-		public CellMap(double width, double height, int maxControlPoints, int maxTriangles, int maxCells) {
+		public CellMap(double width, double height, int maxControlPoints, int maxQuads, int maxCells) {
 			this.width = width;
 			this.height = height;
 			this.cells = new Cell[maxCells];
 			this.numCells = 0;
-			this.triangles = new Triangle[maxTriangles];
-			this.numTriangles = 0;
+			this.quads = new Quad[maxQuads];
+			this.numQuads = 0;
 			this.cps = new ControlPoint[maxControlPoints];
 			this.numControlPoints = 0;
-			this.quads = new Quad[20]; // max 12 quads for 3x7 grid, with margin
-			this.numQuads = 0;
-		}
-
-		/**
-		 * Build quadrilaterals from the control point grid structure.
-		 * Sorts control points into columns (by x) and rows (by y),
-		 * then creates quads from consecutive row pairs in adjacent columns.
-		 * Call after findControlPoints() has established all practical (xx,yy) positions.
-		 */
-		public void buildQuadsFromGrid() {
-			// Collect distinct x values to identify columns
-			java.util.TreeSet<Double> xSet = new java.util.TreeSet<>();
-			for (int i = 0; i < numControlPoints; i++)
-				xSet.add(cps[i].x);
-
-			double[] xValues = new double[xSet.size()];
-			int xi = 0;
-			for (double xv : xSet)
-				xValues[xi++] = xv;
-
-			int numCols = xValues.length;
-
-			// For each column, collect control points sorted by y
-			ControlPoint[][] grid = new ControlPoint[numCols][];
-			for (int col = 0; col < numCols; col++) {
-				java.util.ArrayList<ControlPoint> colPoints = new java.util.ArrayList<>();
-				for (int i = 0; i < numControlPoints; i++) {
-					if (Math.abs(cps[i].x - xValues[col]) < EPSILON)
-						colPoints.add(cps[i]);
-				}
-				colPoints.sort((a, b) -> Double.compare(a.y, b.y));
-				grid[col] = colPoints.toArray(new ControlPoint[0]);
-			}
-
-			// Build quads between adjacent columns
-			numQuads = 0;
-			for (int col = 0; col < numCols - 1; col++) {
-				int numRows = Math.min(grid[col].length, grid[col + 1].length);
-				for (int row = 0; row < numRows - 1; row++) {
-					// TL = grid[col][row],   TR = grid[col+1][row]
-					// BL = grid[col][row+1], BR = grid[col+1][row+1]
-					Quad q = new Quad(
-						grid[col][row],      // p0 = TL
-						grid[col + 1][row],  // p1 = TR
-						grid[col + 1][row + 1], // p2 = BR
-						grid[col][row + 1]   // p3 = BL
-					);
-					q.computeHomography();
-					quads[numQuads++] = q;
-				}
-			}
 		}
 	}
 	
@@ -619,12 +636,11 @@ public class ProcessImage {
 //	public static final boolean __DEBUG_SAVE_INCORRECT_IMAGES = false;         // debug find regions algorithm
 //
 	/**
-	 * given an array with n pairs of coordinates
-	 * tranform these points using the triangles
-	 * and write the result in target. source can
-	 * be equal to target.
+	 * Given an array with n pairs of theoretical coordinates, transform
+	 * these points using the piecewise projective (quad-based) homography
+	 * mapping and write the result in target. source can be equal to target.
 	 */
-	public static void findMappingOfPointsByTriangles(CellMap M, double source[], double target[], int n) {
+	public static void findMappingOfPointsByQuads(CellMap M, double source[], double target[], int n) {
 	     int i;
 	     for (i=0;i<n;i++) {
 	         double x = source[2*i];
@@ -683,19 +699,21 @@ public class ProcessImage {
 
 	            if (status == true) {
 
-	                // Build piecewise projective quad grid from control points
-	                cellMap.buildQuadsFromGrid();
+	                // All control point practical positions are now known,
+	                // so precompute each quad's projective homography for
+	                // the piecewise mapping that follows.
+	                cellMap.computeQuadHomographies();
 
 	                // sampleCellIntensities(img, cellMap); // sample cell intensities
 
 	                // System.println("OK! found everything!\n");
 
 
-//	                #ifdef   __DEBUG_SAVE_CORRECT_IMAGE
+//	                #ifdef   __DEBUG_SAVE_CORRECT_IMAGE            
 //	                char filename[100];
 //	                sSystem.println(filename,"c:/workspace/mnfimg/c/img/debug-t%d-i%d.eps",_thresholds[k],____COUNT++);
 //	                System.println("saving file %s\n",filename);
-//	                writeEPSwithCandidatesAndTargetsAndMapping(filename,img,_thresholds[k],cellMap,r);
+//	                writeEPSwithCandidatesAndTargetsAndMapping(filename,img,_thresholds[k],cellMap,r);                
 //	                System.println("file saved!\n");
 //	                #endif
 
@@ -1715,9 +1733,19 @@ public class ProcessImage {
 
 
 	/**
-	 * This finds the mapped position of a theorical point on the image
-	 * based on the targets given by P, using a projective (homography)
-	 * transformation from the 4 corner targets.
+	 * Finds the mapped position of a theoretical point on the image based
+	 * on the four outer targets given in P, using a projective homography.
+	 *
+	 * P is laid out as 8 doubles: x0,y0,x1,y1,x2,y2,x3,y3 corresponding to
+	 * TL, TR, BR, BL corner targets on the image. The theoretical point
+	 * (x,y) is normalized by the CellMap dimensions to (u,v) = (x/W, y/H)
+	 * in the unit square [0,1]x[0,1]; the homography then maps (u,v) to
+	 * the practical image coordinates of the deformed quad.
+	 *
+	 * This replaces the previous bilinear fallback: since the exam image
+	 * captured by a cell camera is subject to a genuine perspective
+	 * distortion, a homography (not bilinear interpolation) is the
+	 * geometrically correct undistortion.
 	 */
 	public static void findMappingOfPoint(CellMap M, double x, double y, double P[], double mapping[]) {
 
@@ -1732,8 +1760,14 @@ public class ProcessImage {
 
 	   double det = dx1 * dy2 - dy1 * dx2;
 
-	   double g = (dx3 * dy2 - dy3 * dx2) / det;
-	   double h = (dx1 * dy3 - dy1 * dx3) / det;
+	   double g, h;
+	   if (Math.abs(det) < 1.0e-12) {
+	      g = 0.0;
+	      h = 0.0;
+	   } else {
+	      g = (dx3 * dy2 - dy3 * dx2) / det;
+	      h = (dx1 * dy3 - dy1 * dx3) / det;
+	   }
 
 	   double a = x1 - x0 + g * x1;
 	   double b = x3 - x0 + h * x3;
@@ -1748,83 +1782,26 @@ public class ProcessImage {
 	   double w = g * u + h * v + 1.0;
 	   mapping[0] = (a * u + b * v + c) / w;
 	   mapping[1] = (d * u + e * v + f) / w;
-
-	}
-
-	private static boolean triangleConvexCombination(Triangle t, double x, double y, double mapping[], int mappingOffset) {
-	     
-		 double a1 = t.getP1().x;
-	     double a2 = t.getP1().y;
-	     
-	     double b1 = t.getP2().x;
-	     double b2 = t.getP2().y;
-	     
-	     double c1 = t.getP3().x;
-	     double c2 = t.getP3().y;
-	     
-	     double denom = -b1*a2+c1*a2-c1*b2+b2*a1-c2*a1+c2*b1;
-	     
-	     double alpha = (-b1*y-c1*b2+c1*y+c2*b1-c2*x+b2*x)/denom;
-	     if (alpha < -EPSILON || alpha > 1 + EPSILON)
-	        return false;
-	     
-	     double beta = -(c1*y-c2*x-c1*a2+c2*a1-a1*y+x*a2)/denom;
-	     if (beta < -EPSILON || beta > 1 + EPSILON)
-	        return false;
-
-	     double gamma = (-b1*a2+b1*y-a1*y-b2*x+x*a2+b2*a1)/denom;
-	     if (gamma < -EPSILON || gamma > 1 + EPSILON)
-	        return false;
-	        
-	     mapping[mappingOffset] = alpha * t.getP1().xx + beta * t.getP2().xx + gamma * t.getP3().xx;
-	     mapping[mappingOffset+1] = alpha * t.getP1().yy + beta * t.getP2().yy + gamma * t.getP3().yy;
-
-//	     #ifdef __DEBUG_TRIANGLE_CONVEX_COMBINATION
-//	     System.println("convex combination was %.3f %.3f %.3f for point %.3f %.3f on triangle %d(%.3f %.3f) %d(%.3f %.3f) %d(%.3f %.3f)\n",
-//	     alpha,beta,gamma,x,y,t.p1.id,t.p1.x,t.p1.y,t.p2.id,t.p2.x,t.p2.y,t.p3.id,t.p3.x,t.p3.y);
-//	     #endif
-
-	     return true;
 	}
 
 	/**
-	 * @param M
-	 * @param x
-	 * @param y
-	 * @param mapping two position double
-	 */
-	public static void findMappingOfPointByTriangles(CellMap M, double x, double y, double mapping[], int mappingOffset) {
-	     int i;
-	     for (i=0;i<M.getNumberOfTriangles();i++) {
-	         Triangle t = M.getTriangle(i);
-	         if (triangleConvexCombination(t,x,y,mapping,mappingOffset)) {
-//	            #ifdef __DEBUG_TRIANGLE_CONVEX_COMBINATION
-//	            System.println("point %.3f %.3f is inside triangle %d %d %d and will be mapped to %.3f %.3f\n",
-//	            x,y,t.p1.id,t.p2.id,t.p3.id,mapping[0],mapping[1]);
-//	            #endif
-	            return;
-	         }
-	     }
-	     mapping[0] = 0.0;
-	     mapping[1] = 0.0;
-	     System.out.println("FATAL ERROR: did not find a triangle, mapping will be 0 0\n");
-	}
-
-	/**
-	 * Map a theoretical point (x,y) to practical pixel coordinates using
+	 * Map a theoretical point (x,y) to image (practical) coordinates using
 	 * the piecewise projective (homography) mapping over the quad grid.
-	 * Falls back to triangle-based mapping if no quad contains the point.
+	 * Iterates quads until one whose bounding box contains the point is
+	 * found, then applies that quad's homography. This replaces the
+	 * previous piecewise-affine (triangle-based) mapping.
 	 */
 	public static void findMappingOfPointByQuads(CellMap M, double x, double y, double mapping[], int mappingOffset) {
-	    for (int i = 0; i < M.numQuads; i++) {
-	        Quad q = M.quads[i];
-	        if (q.contains(x, y)) {
-	            q.map(x, y, mapping, mappingOffset);
-	            return;
-	        }
-	    }
-	    // Fallback to triangles if point is outside all quads
-	    findMappingOfPointByTriangles(M, x, y, mapping, mappingOffset);
+	     for (int i = 0; i < M.numQuads; i++) {
+	         Quad q = M.quads[i];
+	         if (q.contains(x, y)) {
+	             q.map(x, y, mapping, mappingOffset);
+	             return;
+	         }
+	     }
+	     mapping[mappingOffset] = 0.0;
+	     mapping[mappingOffset + 1] = 0.0;
+	     System.out.println("FATAL ERROR: did not find a quad for point, mapping will be 0 0\n");
 	}
 
 	public static void mapCorners(CellMap M, double x, double y, double w, double h, double out[]) {

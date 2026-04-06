@@ -12,22 +12,17 @@ import java.awt.event.MouseEvent;
 import java.awt.font.TextLayout;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Rectangle2D;
-import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.StringTokenizer;
+import java.util.TreeSet;
 
 import javax.swing.AbstractAction;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
-
-import mixnfix.gui.App;
 
 /**
  *
@@ -45,7 +40,7 @@ public class CellMap {
 
 	private ArrayList<Cell> _cells;
 	private ArrayList<ControlPoint> _controls;
-	private ArrayList<Triangle> _triangles;
+	private ArrayList<Quadrilateral> _quads;
 
 	private ArrayList<Field> _allFields;
 	private ArrayList<Field> _rootFields;
@@ -57,7 +52,7 @@ public class CellMap {
 		_H = H;
 		_cells = new ArrayList<Cell>();
 		_controls = new ArrayList<ControlPoint>();
-		_triangles = new ArrayList<Triangle>();
+		_quads = new ArrayList<Quadrilateral>();
 		_allFields = new ArrayList<Field>();
 		_rootFields = new ArrayList<Field>();
 
@@ -97,8 +92,8 @@ public class CellMap {
 		return (List<Cell>)_cells.clone();
 	}
 
-	public List<Triangle> getTriangulation() {
-		return (List<Triangle>)_triangles.clone();
+	public List<Quadrilateral> getQuads() {
+		return (List<Quadrilateral>)_quads.clone();
 	}
 
 	public List<Field> getAllFields() {
@@ -427,110 +422,111 @@ public class CellMap {
 	}
 
 
-	public boolean getImageCoordinateByTriangulation(double x, double y, double mapping[]) {
-		for (Triangle t: _triangles) {
-			if (t.triangleConvexCombination(x,y,mapping))
+	/**
+	 * Maps a theoretical point (x,y) on the answer sheet to its image
+	 * (practical) coordinates by locating the quadrilateral that contains
+	 * it and applying that quad's projective homography (piecewise
+	 * projective mapping). Replaces the previous piecewise-affine
+	 * (triangle-based) mapping.
+	 *
+	 * @return true if a quadrilateral containing the point was found and
+	 *         the mapping was applied, false otherwise.
+	 */
+	public boolean getImageCoordinateByQuads(double x, double y, double mapping[]) {
+		for (Quadrilateral q : _quads) {
+			if (q.mapToImage(x, y, mapping))
 				return true;
 		}
 		return false;
 	}
 
 	/**
-	 * This will calculate a delaunay-voronoi triangulation
-	 * with current control points.
+	 * Build the piecewise-projective quad grid from the current control
+	 * points. The control points are expected to lie on a rectangular grid
+	 * with several columns (same x within each column) and the same number
+	 * of rows in every column. Quads are formed between pairs of adjacent
+	 * columns and consecutive rows, in theoretical order TL, TR, BR, BL.
+	 *
+	 * After the practical (image) positions of the control points are
+	 * known, call {@link #computeQuadHomographies()} to finalize the
+	 * homography of each quad.
 	 */
-	public void autoTriangulation() {
-		try {
+	public void buildQuadsFromGrid() {
+		_quads.clear();
 
-			// triangulate points
-			double x0 = this.getX0();
-			double y0 = this.getY0();
+		// Collect distinct x values (columns) with an EPSILON tolerance.
+		TreeSet<Double> xSet = new TreeSet<Double>();
+		for (ControlPoint cp : _controls)
+			xSet.add(cp.getX());
 
-			// create input filename
-			long time = System.currentTimeMillis();
-			String pointFileName = "p" + time + ".node";
-			String ouputFileName = "p" + time + ".1.ele";
+		double[] xValues = new double[xSet.size()];
+		int xi = 0;
+		for (double xv : xSet)
+			xValues[xi++] = xv;
 
-			File pointFile = new File(pointFileName);
-			File outputFile = new File(ouputFileName);
-
-			PrintWriter pw = new PrintWriter(new FileOutputStream(pointFile));
-			List<ControlPoint> lcps = this.getControlPoints();
-			pw.println(String.format("%d 2 0 0", lcps.size()));
-			int id = 1;
-			for (ControlPoint cp : lcps) {
-				pw.println(String.format("%d %.4f %.4f", id, x0 - cp.getX(), y0 - cp.getY()));
-			}
-			pw.close();
-
-			// RUN
-			//String systemCall = "t " + pointFileName;
-			String systemCall = App.getConfiguracao().getCommandTriangulate(pointFileName);
-			// System.out.println("[triangulate command] "+systemCall);
-			Process process = Runtime.getRuntime().exec(systemCall);
-			try {
-				process.waitFor();
-			}
-			catch (InterruptedException ex) {
-				ex.printStackTrace();
-			}
-
-			// TRIANGLES
-
-			// Read file
-			BufferedReader b = new BufferedReader(new FileReader(outputFile));
-			String st;
-			st = b.readLine();
-
-			// System.out.println("Processing: "+st);
-			StringTokenizer t = new StringTokenizer(st, " ");
-			int count = Integer.parseInt(t.nextToken());
-
-			// read id of triangles
-			for (int i = 0; i < count; i++) {
-				st = b.readLine();
-				t = new StringTokenizer(st, " ");
-				t.nextToken();
-				ControlPoint p1 = _controls.get(Integer.parseInt(t.nextToken()) - 1);
-				ControlPoint p2 = _controls.get(Integer.parseInt(t.nextToken()) - 1);
-				ControlPoint p3 = _controls.get(Integer.parseInt(t.nextToken()) - 1);
-				Triangle tt = new Triangle(p1, p2, p3);
-				_triangles.add(tt);
-			}
-
-			// close
-			b.close();
-
-			// delete
-			outputFile.delete();
-			pointFile.delete();
-			(new File("p" + time + ".1.node")).delete();
-
+		int numCols = xValues.length;
+		if (numCols < 2)
 			return;
 
+		// For each column, collect control points sorted by y.
+		ControlPoint[][] grid = new ControlPoint[numCols][];
+		for (int col = 0; col < numCols; col++) {
+			ArrayList<ControlPoint> colPoints = new ArrayList<ControlPoint>();
+			for (ControlPoint cp : _controls) {
+				if (Math.abs(cp.getX() - xValues[col]) < Quadrilateral.EPSILON)
+					colPoints.add(cp);
+			}
+			colPoints.sort((a, b) -> Double.compare(a.getY(), b.getY()));
+			grid[col] = colPoints.toArray(new ControlPoint[0]);
 		}
-		catch (Exception ex1) {
-			System.out.println("Failure in triangulation");
-			throw new RuntimeException("Triang. Problem");
+
+		// Build quads between adjacent columns and consecutive rows.
+		for (int col = 0; col < numCols - 1; col++) {
+			int numRows = Math.min(grid[col].length, grid[col + 1].length);
+			for (int row = 0; row < numRows - 1; row++) {
+				// TL = grid[col][row],     TR = grid[col+1][row]
+				// BR = grid[col+1][row+1], BL = grid[col][row+1]
+				Quadrilateral q = new Quadrilateral(
+					grid[col][row],         // p0 = TL
+					grid[col + 1][row],     // p1 = TR
+					grid[col + 1][row + 1], // p2 = BR
+					grid[col][row + 1]      // p3 = BL
+				);
+				_quads.add(q);
+			}
 		}
 	}
 
 	/**
-	 * write file with normalized control points.
+	 * Recompute the homography of every quad from the current practical
+	 * (image) positions of its control points. Call this once the
+	 * control-point image positions have been loaded/updated (e.g. after
+	 * {@code ControlPoint.setImageXY} on every point).
+	 */
+	public void computeQuadHomographies() {
+		for (Quadrilateral q : _quads)
+			q.computeHomography();
+	}
+
+	/**
+	 * Write a file with normalized control points and quads.
+	 *
+	 * Format:
+	 *   numCells numControlPoints numQuads
+	 *   W H
+	 *   <numControlPoints> lines of: id x y
+	 *   <numQuads> lines of: p0.id p1.id p2.id p3.id   (TL, TR, BR, BL)
+	 *   <numCells> lines of: id x y w0 h0 w1 h1 w2 h2 whiteSampleSet
 	 */
 	public void writeNormalizedControlPoints(String fileName) throws Exception {
 
-		// triangulate points
 		double x0 = this.getX0();
 		double y0 = this.getY0();
 
-		// write file
 		PrintWriter pw = new PrintWriter(new FileOutputStream(fileName));
 
-		// print cells and control points number
-
-		int numTriangles = this._triangles.size();
-		pw.append(String.format("%d %d %d\n",_cells.size(),_controls.size(),numTriangles));
+		int numQuads = this._quads.size();
+		pw.append(String.format("%d %d %d\n",_cells.size(),_controls.size(),numQuads));
 
 		// print map dimension
 		pw.append(String.format("%.3f %.3f\n",this.getW(),this.getH()));
@@ -541,14 +537,17 @@ public class CellMap {
 			pw.append(String.format("%d %.3f %.3f\n",++numControls,pc.getX()-x0,pc.getY()-y0));
 		}
 
-		// print triangles
-		for (Triangle t: _triangles) {
-			pw.append(String.format("%d %d %d\n",t.getP1().getId(),t.getP2().getId(),t.getP3().getId()));
+		// print quads (TL TR BR BL)
+		for (Quadrilateral q : _quads) {
+			pw.append(String.format("%d %d %d %d\n",
+				q.getP0().getId(),
+				q.getP1().getId(),
+				q.getP2().getId(),
+				q.getP3().getId()));
 		}
 
 		// print cells
 		for (Cell c: _cells) {
-			// pw.append(String.format("%d %.3f %.3f %.3f %.3f\n",++numCell,c.getX(),c.getY(),(c.getW()/2.0f) * Math.sqrt(2.0),(c.getW()/2.0f) * Math.sqrt(2.0)));
 			pw.append(String.format("%d %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %d\n",
 					c.getId(),c.getX()-x0,c.getY()-y0,
 					c.getW0(),c.getH0(),

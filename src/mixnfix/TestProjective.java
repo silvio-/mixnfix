@@ -20,14 +20,13 @@ public class TestProjective {
     public static void main(String[] args) throws Exception {
 
         if (args.length < 2) {
-            System.out.println("Usage: java mixnfix.TestProjective <image> <node_file> [ele_file]");
-            System.out.println("  ele_file is optional (quads are built from the grid structure)");
+            System.out.println("Usage: java mixnfix.TestProjective <image> <node_file>");
+            System.out.println("  Quads are built automatically from the control-point grid.");
             return;
         }
 
         String imageFile = args[0];
         String nodeFile = args[1];
-        String eleFile = args.length >= 3 ? args[2] : null;
 
         // --- Load image ---
         System.out.println("Loading image: " + imageFile);
@@ -99,26 +98,11 @@ public class TestProjective {
             System.out.format("  CP %2d: (%.1f, %.1f)\n", cpIds[i], x, y);
         }
 
-        // Add triangles from .ele file if provided
-        if (eleFile != null) {
-            System.out.println("Loading triangles: " + eleFile);
-            br = new BufferedReader(new FileReader(eleFile));
-            line = br.readLine().trim();
-            st = new StringTokenizer(line);
-            int numTri = Integer.parseInt(st.nextToken());
-            System.out.format("Number of triangles: %d\n", numTri);
-
-            for (int i = 0; i < numTri; i++) {
-                line = br.readLine().trim();
-                st = new StringTokenizer(line);
-                st.nextToken(); // triangle id
-                int p1 = Integer.parseInt(st.nextToken());
-                int p2 = Integer.parseInt(st.nextToken());
-                int p3 = Integer.parseInt(st.nextToken());
-                MFI2Java.addTriangle(p1, p2, p3);
-            }
-            br.close();
-        }
+        // Build the piecewise-projective quad grid from the control points.
+        // (Triangles are no longer used - the mapping is now piecewise
+        // projective, one homography per quadrilateral in the 3xN grid.)
+        MFI2Java._cellMap.buildQuadsFromGrid();
+        System.out.format("Number of quads: %d\n", MFI2Java._cellMap.numQuads);
 
         // --- Set constraints (relaxed for severely deformed image) ---
         int[] thresholds = {50, 60, 70, 80, 90, 100, 110, 120};

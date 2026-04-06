@@ -73,7 +73,7 @@ public class FolhaRespostaQuestionarioBasico implements IFolhaResposta {
                 b.addToCellMap(_cellMapFixo);
             _cellMapFixo.addControlPoint(X0+WIDTH/2.0f,Y0);
             _cellMapFixo.addControlPoint(X0+WIDTH/2.0f,Y0+HEIGHT);
-            _cellMapFixo.autoTriangulation(); // triangulate
+            _cellMapFixo.buildQuadsFromGrid(); // piecewise projective grid
         }
         catch (CellMapException ex) {
             ex.printStackTrace();

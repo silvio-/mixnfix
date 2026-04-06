@@ -98,8 +98,8 @@ public class MFI2Java {
 		// printf("setConstraints\n");
 	}
 
-    public static void newCellMap(double width, double height, int maxControlPoints, int maxTriangles) {
-    	_cellMap = new ProcessImage.CellMap(width, height, maxControlPoints, maxTriangles, 1);   
+    public static void newCellMap(double width, double height, int maxControlPoints, int maxQuads) {
+    	_cellMap = new ProcessImage.CellMap(width, height, maxControlPoints, maxQuads, 1);
     }
 
     public static void releaseCellMap() {
@@ -110,10 +110,10 @@ public class MFI2Java {
     	return _cellMap.addControlPoint(id, x, y).id;
     }
 
-    public static int addTriangle(
-        int cp1, int cp2, int cp3
+    public static int addQuad(
+        int cp0, int cp1, int cp2, int cp3
     ) {
-    	_cellMap.addTriangle(cp1, cp2, cp3);
+    	_cellMap.addQuad(cp0, cp1, cp2, cp3);
     	return 1;
     }
 
@@ -168,7 +168,7 @@ public class MFI2Java {
     }
 
     public static void tranformPoints(double[] source, double[] target, int n) {
-        ProcessImage.findMappingOfPointsByTriangles(_cellMap,source,target,n);
+        ProcessImage.findMappingOfPointsByQuads(_cellMap,source,target,n);
     }
 
     static byte _data[] = new byte[10000000];

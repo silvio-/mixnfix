@@ -72,7 +72,7 @@ import mixnfix.folharesposta.Field;
 import mixnfix.folharesposta.IFolhaResposta;
 import mixnfix.folharesposta.MultiField;
 import mixnfix.folharesposta.OptionField;
-import mixnfix.folharesposta.Triangle;
+import mixnfix.folharesposta.Quadrilateral;
 import mixnfix.modelo.Aluno;
 import mixnfix.modelo.AlunoTurma;
 import mixnfix.modelo.Instituicao;
@@ -2910,8 +2910,8 @@ class MFActionColetarQuestionarios extends AbstractAction {
             MFI2Java.addControlPoint(cp.getId(), cp.getX() - map.getX0(), cp.getY() - map.getY0());
         }
 
-        for (Triangle t: map.getTriangulation()) {
-            MFI2Java.addTriangle(t.getP1().getId(),t.getP2().getId(),t.getP3().getId());
+        for (Quadrilateral q: map.getQuads()) {
+            MFI2Java.addQuad(q.getP0().getId(),q.getP1().getId(),q.getP2().getId(),q.getP3().getId());
         }
 
         System.out.println("Set Contraints");
@@ -3298,8 +3298,8 @@ class MFActionColetarProvas extends AbstractAction {
             MFI2Java.addControlPoint(cp.getId(), cp.getX() - map.getX0(), cp.getY() - map.getY0());
         }
 
-        for (Triangle t: map.getTriangulation()) {
-            MFI2Java.addTriangle(t.getP1().getId(),t.getP2().getId(),t.getP3().getId());
+        for (Quadrilateral q: map.getQuads()) {
+            MFI2Java.addQuad(q.getP0().getId(),q.getP1().getId(),q.getP2().getId(),q.getP3().getId());
         }
 
         System.out.println("Set Contraints");
