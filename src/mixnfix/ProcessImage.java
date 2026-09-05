@@ -128,10 +128,14 @@ public class ProcessImage {
 
 	};
 
-	public static final int MAX_WIDTH=1000;            // maximum width of an image
-	public static final int MAX_HEIGHT=1000;           // maximum height of an image
-	public static final int MAX_POINTS=1000000;        // maximum number of points
-	public static final int MAX_REGIONS=1000000;       // maximum number of regions
+	// NOTE: these constants used to bound the size of the static matrices
+	// of the old region labelling code. The labelling now allocates what
+	// it needs (see findRegions), so pictures of any size are accepted;
+	// they are kept only for backward compatibility.
+	public static final int MAX_WIDTH=1000;            // (unused) former maximum width of an image
+	public static final int MAX_HEIGHT=1000;           // (unused) former maximum height of an image
+	public static final int MAX_POINTS=1000000;        // (unused) former maximum number of points
+	public static final int MAX_REGIONS=1000000;       // (unused) former maximum number of regions
 
 	public static final int MAX_THRESHOLDS=8;          // maximum number of thresholds to calculate simultaneously
 
@@ -654,85 +658,82 @@ public class ProcessImage {
 	 */
 	public static int fitToImage(Img img, CellMap cellMap) {
 
-	    System.out.println("threshold\n");
+	    int numCP = cellMap.numControlPoints;
+	    int minInliers = Math.max(4, (int)Math.ceil(ControlPointDetector.MIN_INLIER_FRACTION * numCP));
 
-	    thresholdMatrix(img); // calculate regions for the thresholds
+	    double diagonal = Math.sqrt((double)img.getW() * img.getW() + (double)img.getH() * img.getH());
+	    double maxRms = Math.max(2.0, 0.005 * diagonal); // "perfect fit" accuracy
 
-	    int k;
-	    for (k = 0; k < _NUM_THRESHOLDS; k++) {
+	    ControlPointDetector.Fit best = null;
+	    int bestThreshold = -1;
 
-	        System.out.format("testing threshold %d\n",_thresholds[k]);
-	        Region r = _representantRegionList[k];
-	        
-	        filterCandidates(img.getW(), img.getH(), r); // find set of points to search for targets
-	        sort(_candidates, _numCandidates); // sort _candidates by x coordinate
+	    // Try the thresholds one at a time: labelling the image is by far
+	    // the most expensive step, so it is done lazily and the search
+	    // stops as soon as one threshold gives a complete and accurate
+	    // control point grid. Otherwise the best fit of all thresholds is
+	    // used, which makes the detection robust to poor illumination.
+	    for (int k = 0; k < _NUM_THRESHOLDS; k++) {
 
-	        System.out.format("find possible targets (numCandidates: %d)\n",_numCandidates);
-	        findPossibleTargets(_candidates, _numCandidates); // find all possible targets
+	        long t0 = System.currentTimeMillis();
 
-//	        #ifdef   __DEBUG_SAVE_INCORRECT_IMAGES            
-//	        System.println("save debug image...\n",_numCandidates);
-//	        if (_numTargets == 0) {
-//	            char filename[100];
-//	            System.out.println(filename,"c:/workspace/mnfimg/c/img/debug-t%d-i%d.eps",_thresholds[k],____COUNT++);
-//	            System.out.println("saving file %s\n",filename);
-//	            writeEPSwithCandidatesAndTargetsAndMapping(filename,img,_thresholds[k],cellMap,r);                
-//	            System.out.println("file saved!\n");
-//	        }
-//	        #endif
+	        Region regions = findRegions(img, _thresholds[k]);
+	        _representantRegionList[k] = regions;
+	        _numRegions[k] = _lastNumRegions;
+	        _numRepresentants[k] = _lastNumRepresentants;
 
-	        // System.println("found %d 4-targets...\n",_numTargets);
+	        ControlPointDetector.Fit f = ControlPointDetector.detect(regions, cellMap, img.getW(), img.getH());
 
-	        int kk;
-	        double x[] = new double[8];
-	        for (kk = 0; kk < _numTargets; kk++) {
-
-	            extractTargetPositions(_candidates, _targets, (4 * kk), x);
-	            System.out.format("extracted target positions (%.3f,%.3f), (%.3f,%.3f), (%.3f,%.3f), (%.3f,%.3f)...\n",x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7]);
-
-
-	            System.out.format("find control points...\n");
-
-	            boolean status = findControlPoints(x, cellMap, r); // find all possible targets
-
-	            // System.println("finished control points\n");
-
-	            if (status == true) {
-
-	                // All control point practical positions are now known,
-	                // so precompute each quad's projective homography for
-	                // the piecewise mapping that follows.
-	                cellMap.computeQuadHomographies();
-
-	                // sampleCellIntensities(img, cellMap); // sample cell intensities
-
-	                // System.println("OK! found everything!\n");
-
-
-//	                #ifdef   __DEBUG_SAVE_CORRECT_IMAGE            
-//	                char filename[100];
-//	                sSystem.println(filename,"c:/workspace/mnfimg/c/img/debug-t%d-i%d.eps",_thresholds[k],____COUNT++);
-//	                System.println("saving file %s\n",filename);
-//	                writeEPSwithCandidatesAndTargetsAndMapping(filename,img,_thresholds[k],cellMap,r);                
-//	                System.println("file saved!\n");
-//	                #endif
-
-	                return 1;
-	            }
-	            else {
-//	                #ifdef   __DEBUG_SAVE_INCORRECT_IMAGES            
-//	                char filename[100];
-//	                sSystem.println(filename,"c:/workspace/mnfimg/c/img/problem-t%d-i%d.eps",_thresholds[k],____COUNT++);
-//	                System.println("saving file %s\n",filename);
-//	                writeEPSwithCandidatesAndTargetsAndMapping(filename,img,_thresholds[k],cellMap,r);                
-//	                System.println("file saved!\n");
-//	                #endif
-	            }
+	        if (f != null && f.better(best)) {
+	            best = f;
+	            bestThreshold = _thresholds[k];
 	        }
+
+	        if (VERBOSE)
+	            System.out.format("threshold %d: %d blobs, %d/%d control points (%d ms)%n",
+	                _thresholds[k], _lastNumRepresentants, (f == null ? 0 : f.inliers), numCP,
+	                (System.currentTimeMillis() - t0));
+
+	        // a complete (or nearly complete) and accurate grid is a very
+	        // strong evidence: no need to label the image again
+	        if (best != null && best.inliers >= numCP - 1 && best.rms() <= maxRms)
+	            break;
 	    }
-	    // System.println("did not find all control points!\n");
-	    return 0;
+
+	    if (best == null || best.inliers < minInliers) {
+	        if (VERBOSE)
+	            System.out.println("did not find the control points!");
+	        return 0;
+	    }
+
+	    int found = ControlPointDetector.applyFit(best, cellMap);
+
+	    // statistics of the last fit (useful for reports and diagnostics)
+	    _lastFitThreshold = bestThreshold;
+	    _lastFitControlPoints = found;
+	    _lastFitRms = best.rms();
+
+	    if (VERBOSE)
+	        System.out.format("control points located with threshold %d: %d/%d dots, rms %.2f pixels%n",
+	                          bestThreshold, found, numCP, best.rms());
+
+	    if (found < minInliers)
+	        return 0;
+
+	    // All control point practical positions are now known, so
+	    // precompute each quad's projective homography for the piecewise
+	    // mapping that follows.
+	    cellMap.computeQuadHomographies();
+
+	    return 1;
 	}
+
+	/** print progress information of the control point search. */
+	public static boolean VERBOSE = true;
+
+	/** statistics of the last successful call to {@link #fitToImage}. */
+	public static int _lastFitThreshold = -1;
+	public static int _lastFitControlPoints = 0;
+	public static double _lastFitRms = Double.MAX_VALUE;
 
 //	#include "mfi.h"
 //	#include <stdio.h>
@@ -778,210 +779,17 @@ public class ProcessImage {
 	public static int _targets[] = new int[4*MAX_TARGETS];    // (OUTPUT) indexes of the valid 4-targets (CCW sorted) found
 	public static int _numTargets;                            // (OUTPUT) total number of valid 4-targets found
 
-	/**
-	 * find valid 4-targets rectangles satisfying the 
-	 * given constraints.
+	/*
+	 * The old rectangle based 4-target search (findPossibleTargets) used
+	 * to live here. It enumerated every 4-subset of the candidate blobs
+	 * (O(n^4)) and only accepted quadrilaterals that were almost
+	 * rectangles: 90 degree corners within _DIF_ANGLE, a prescribed side
+	 * ratio (_CORRECT_SIDE_RATIO) and a parallelogram test
+	 * (_TARGET_RADIUS). Those constraints are not projective invariants,
+	 * so they rejected the pictures of severely (perspectively) deformed
+	 * exams. It has been replaced by the projective and much cheaper
+	 * search implemented in mixnfix.ControlPointDetector.
 	 */
-	public static void findPossibleTargets(double x[], int n) {
-	    int a[] = {-1,-1,-1,-1};
-	    int p[] = {1,2,3,4};
-	    double xx[] = {0,0,0,0};
-	    double yy[] = {0,0,0,0};
-	    double costheta[] = {0,0,0,0};
-	    double length[] = {0,0,0,0};
-	    
-	    _numTargets = 0;
-
-	    double dif_costheta = Math.cos((90 - _DIF_ANGLE) * Math.PI / 180.0);
-
-	    double x1,y1,x2,y2,x3,y3,x4,y4;
-	    double w12,w13,w42,w43;
-	    double costheta1,costheta2;
-
-	    int i=0;
-	    while (i >= 0) {
-	        
-	        a[i]++;
-	        
-	        
-	        if (a[i] > n-(4-i)) {
-	           i--;
-	           continue;
-	        }
-
-//	        #ifdef __DEBUG_TARGETS
-//	        int kk;
-//	        for (kk=0;kk<=i;kk++)
-//	            System.println("%d ",a[kk]);
-//	        System.println("\n",a[i]);           
-//	        #endif
-	        
-	        if (i == 0) {
-
-	            xx[i] = x[2*a[i]];   
-	            yy[i] = x[2*a[i]+1];
-	            costheta[i] = 0;
-	             
-	            x1 = x[2*a[0]];    // initialize point 1
-	            y1 = x[2*a[0]+1];
-
-	            a[i+1] = a[i];
-	            i++;
-	        }
-
-	        else if (i == 1) { // test what?
-
-	            xx[i] = x[2*a[i]];  // second point
-	            yy[i] = x[2*a[i]+1];
-	            length[i] = Math.sqrt((xx[i]-xx[0]) * (xx[i]-xx[0]) + (yy[i]-yy[0]) * (yy[i]-yy[0]));
-	            costheta[i] = (1 * (yy[i] - yy[0]))/length[i]; // = (0 * (xx[i] - xx[0]) + (1 * (yy[i] - yy[0])))/length[i];
-
-	            if (length[i] < _MIN_SIDE) { // less then the minsize => less then diagonal
-
-//	                #ifdef __DEBUG_TARGETS
-//	                System.println("length 01 is too small\n");           
-//	                #endif
-
-	                continue;
-	            }                
-
-	            a[i+1] = a[i];
-	            i++;
-
-	        } // test what?
-	                        
-	        else if (i == 2) { // test angle and ratio
-
-	            xx[i] = x[2*a[i]];  // third point
-	            yy[i] = x[2*a[i]+1];
-	            length[i] = Math.sqrt((xx[i]-xx[0]) * (xx[i]-xx[0]) + (yy[i]-yy[0]) * (yy[i]-yy[0]));
-	            costheta[i] = (1 * (yy[i] - yy[0]))/length[i]; // = (0 * (xx[i] - xx[0]) + (1 * (yy[i] - yy[0])))/length[i];
-
-	            if (length[2] < _MIN_SIDE) {
-
-	                System.out.format("length 02 is too small\n");           
-
-	                continue;
-
-	            }
-
-	            double length12 = Math.sqrt((xx[2]-xx[1]) * (xx[2]-xx[1]) + (yy[2]-yy[1]) * (yy[2]-yy[1]));
-	            if (length12 < _MIN_SIDE) {
-
-	                System.out.format("length 12 is too small\n");           
-
-	                continue;
-
-	            }
-
-	            a[i+1] = a[i];
-	            i++;
-	                    
-	        } // test angle and ratio
-	        
-	        else if (i == 3) { // test angle and ratio and geometry
-	        
-	            xx[i] = x[2*a[i]];  // third point
-	            yy[i] = x[2*a[i]+1];
-	            length[i] = Math.sqrt((xx[i]-xx[0]) * (xx[i]-xx[0]) + (yy[i]-yy[0]) * (yy[i]-yy[0]));
-	            costheta[i] = (1 * (yy[i] - yy[0]))/length[i]; // = (0 * (xx[i] - xx[0]) + (1 * (yy[i] - yy[0])))/length[i];
-
-	            if (length[3] < _MIN_SIDE) {
-
-	                System.out.format("length 03 is too small\n");           
-
-	                continue;
-
-	            }
-	            
-	            // sort permutation vector by costheta
-	            // the angle considered is the one formed
-	            // by the vector (0,-1) starting at the point 
-	            // with smallest x-coordinate
-	            p[0] = 0; p[1] = 1; p[2] = 2; p[3] = 3;
-	            for (int k=2;k<=3;k++) {
-	                int j = k-1;
-	                int pk = p[k];                
-	                while (j > 0 && costheta[p[j]] > costheta[pk]) {
-	                   p[j+1]=p[j];
-	                   j--;
-	                }
-	                j++;
-	                p[j] = pk;
-	            }
-
-	            System.out.format("permutation was %d %d %d %d\n",a[p[0]],a[p[1]],a[p[2]],a[p[3]]);           
-	            
-
-	            // calcular razao AB / AD
-	            double r = (length[p[1]] > length[p[3]] ? length[p[1]]/length[p[3]] : length[p[3]]/length[p[1]]);
-	            if (r < _CORRECT_SIDE_RATIO- _SIDE_RATIO_TOLERANTE|| r > _CORRECT_SIDE_RATIO + _SIDE_RATIO_TOLERANTE) {
-
-	                System.out.format("ratio is incompatible\n");           
-
-	                continue;
-	            }
-
-	            // calcular A = p[0], B = p[1], C = p[2], D = p[3]
-	            double senThetaP1 = Math.sqrt(1.0 - costheta[p[1]] * costheta[p[1]]);
-	            double senThetaP3 = Math.sqrt(1.0 - costheta[p[3]] * costheta[p[3]]);
-	            double cosBAD = costheta[p[1]] * costheta[p[3]] + senThetaP1 * senThetaP3;
-	            
-	            if (cosBAD > dif_costheta || cosBAD < -dif_costheta) { // the angle must be between 88 and 92 degrees 
-
-	            	System.out.format("AB^AD angle is incompatible\n");           
-
-	               continue;
-	            }
-
-	            System.out.format("BÂD angle is %.3f\n", Math.acos(cosBAD));           
-	            
-	            // calcular o ponto C teórico
-	            double xC = xx[p[1]] + xx[p[3]] - xx[p[0]];
-	            double yC = yy[p[1]] + yy[p[3]] - yy[p[0]];
-	            
-	            double dist = Math.sqrt((xC - xx[p[2]]) * (xC - xx[p[2]]) + (yC - yy[p[2]]) * (yC - yy[p[2]]));
-	            
-	            if (dist > _TARGET_RADIUS) {
-
-	            	System.out.format("C teórico muito distante de C real (%3.4f, %3.4f) e (%3.4f, %3.4f), dist = %3.4f \n",
-	                       xC,yC,xx[p[2]],yy[p[2]],dist);           
-
-	               continue;
-	            }
-
-	            System.out.format("ponto C está a uma dist de %.3f\n",dist);           
-	            
-	            System.out.format("....................OK, found targets!\n");
-	            
-	            // find point that is closes to the origin
-	            int closest = 0;
-	            int baseIndex = 2*a[p[0]];
-	            double minDist = x[baseIndex]*x[baseIndex] + x[baseIndex+1]*x[baseIndex+1];
-	            for (int k=1;k<4;k++) {
-	                baseIndex = 2*a[p[k]];
-	                dist = x[baseIndex]*x[baseIndex] + x[baseIndex+1]*x[baseIndex+1];
-	                if (dist < minDist) {
-	                     closest = k;
-	                     minDist = dist;
-	                }
-	            }
-	            
-	            System.out.format("Closest point to the origin was p%d\n",closest);
-	            
-	            _targets[4*_numTargets+0] = a[p[(closest + _PHASE +0) % 4]];    // save targets
-	            _targets[4*_numTargets+1] = a[p[(closest + _PHASE +1) % 4]];
-	            _targets[4*_numTargets+2] = a[p[(closest + _PHASE +2) % 4]];
-	            _targets[4*_numTargets+3] = a[p[(closest + _PHASE +3) % 4]];
-	            
-	            _numTargets++;
-	            
-	            if (_numTargets == MAX_TARGETS) // reached max targets
-	               break;
-	            
-	        } // test angle and ratio
-	    }      
-	}
 //
 //	
 	public static void extractTargetPositions(
@@ -1237,8 +1045,6 @@ public class ProcessImage {
 	public static int      _numRegions[] = new int[MAX_THRESHOLDS];
 	public static int      _numRepresentants[] = new int[MAX_THRESHOLDS];
 	public static Region   _representantRegionList[] = new Region[MAX_THRESHOLDS];
-	public static Region   _regions[][] = new Region[MAX_THRESHOLDS][MAX_REGIONS];
-	public static Region   _R[][][] = new Region[MAX_THRESHOLDS][MAX_HEIGHT][MAX_WIDTH];
 
 	public static int      _NUM_THRESHOLDS = 8;
 
@@ -1251,255 +1057,143 @@ public class ProcessImage {
 //
 
 	/**
-	 * r must be a representant (i.e. r.representant = r)
+	 * Connected component labelling of the dark pixels of the image for a
+	 * single threshold.
+	 *
+	 * <p>The legacy implementation kept, for every threshold, a full
+	 * width x height matrix of region references (8 x 1000 x 1000 static
+	 * references, ~64MB) and always labelled the image for the eight
+	 * thresholds even when the first one already succeeded. This version
+	 * labels one threshold at a time, keeps only two scan lines of labels
+	 * and uses a union-find with path compression, which makes it both
+	 * much faster and essentially memory free. Regions are 4-connected,
+	 * exactly as before.</p>
+	 *
+	 * @return the head of the linked list of representant regions
 	 */
-	public static void removeRepresentantFromList(int k, Region r) {
-	     
-//	     #ifdef __DEBUG_REGIONS
-//	     System.println("removeRepresentantFromList region %d threshold %d\n",r.index,_thresholds[k]);
-//	     #endif
-	     
-	     Region rNext = r.next;
-	     Region rPrevious = r.previous;     
+	public static Region findRegions(Img img, int threshold) {
 
-	     if (rPrevious != null && rNext != null) { // middle element
-	        rPrevious.next = rNext;
-	        rNext.previous = rPrevious;
-	     }
+	    int w = img.getW();
+	    int h = img.getH();
 
-	     else if (rPrevious != null && rNext == null) { // r is the last element
-	        rPrevious.next = null;
-	     }
+	    int xmin = Math.max(0, (int)Math.floor(_leftMargin * w));
+	    int xmax = Math.min(w, (int)Math.ceil(_rightMargin * w));
+	    int ymin = Math.max(0, (int)Math.floor(_topMargin * h));
+	    int ymax = Math.min(h, (int)Math.ceil(_bottomMargin * h));
 
-	     else if (rPrevious == null && rNext != null) { // r is the first element
-	        rNext.previous = null;
-	        _representantRegionList[k] = rNext;
-	     }
-	     
-	     _numRepresentants[k]--;
+	    if (xmax <= xmin || ymax <= ymin) // empty search area: use the whole image
+	        { xmin = 0; xmax = w; ymin = 0; ymax = h; }
 
-	}
+	    Region prev[] = new Region[w];
+	    Region cur[]  = new Region[w];
 
-	/**
-	 * s and r must be representants
-	 * s will be a chidld of r
-	 */
-	public static void mergeRegions(Region r, Region s, int k) {
-	     
-	     // remove s from representant list
-	     removeRepresentantFromList(k,s);
+	    java.util.ArrayList<Region> all = new java.util.ArrayList<Region>();
 
-	     // set new representant to s     
-	     s.representant = r;
+	    for (int i = ymin; i < ymax; i++) {
 
-//	     #ifdef __DEBUG_REGIONS
-//	     System.println("update childs representants...\n");
-//	     #endif
+	        java.util.Arrays.fill(cur, null);
 
-	     // update representant of the childs of s and find lastChild of s
-	     Region lastChild = null;
-	     if (s.numChilds > 0) {
-	         Region child = s.child;
-	         while (true) {
-	             child.representant = r;
-	             if (child.next == null)
-	                break;
-	             child = child.next;
-	         }
-	         lastChild = child;
-	     }
+	        int base = i * w;
+	        for (int j = xmin; j < xmax; j++) {
 
-//	     #ifdef __DEBUG_REGIONS
-//	     System.println("update childs lists...\n");
-//	     #endif
-	          
-	     // insert s at the beginning of it's child list
-	     if (s.numChilds > 0) {
-	         s.next = s.child;
-	         s.previous = null;
-	         s.next.previous = s;
-	         s.child = null;
-	     }
-	     else { // s has no children set lastChild as s
-	         s.next = null;
-	         s.previous = null;
-	         s.child = null;
-	         lastChild = s; 
-	     }
-	     
-	     // append r's childs to lastChild
-	     if (r.numChilds > 0) {
-	        r.child.previous = lastChild;
-	        lastChild.next = r.child;
-	     }
+	            if (img.data[base + j] > threshold) // white pixel
+	                continue;
 
-	     r.child = s; // set child
-	     
-	     //
-	     r.sumx += s.sumx;
-	     r.sumy += s.sumy;
-	        
-	     r.minx = Math.min(r.minx,s.minx);
-	     r.maxx = Math.max(r.maxx,s.maxx);
-	        
-	     r.miny = Math.min(r.miny,s.miny);
-	     r.maxy = Math.max(r.maxy,s.maxy);
-	        
-	     // update the number that will be ready at the end
-	     r.numChilds += 1 + s.numChilds;
-	     r.size += s.size;
-	     
-	     // erase s.numChilds
-	     s.numChilds = 0;         
+	            Region up   = (i > ymin ? representantOf(prev[j]) : null);
+	            Region left = (j > xmin ? representantOf(cur[j-1]) : null);
 
-//	     #ifdef __DEBUG_REGIONS
-//	     System.println("finished merge...\n");
-//	     #endif
-
-	}
-
-	/**
-	 * find the regions based on current thresholds
-	 */
-	public static void thresholdMatrix(Img img) {
-	    int i,j,k;
-
-	    for (k=0;k<_NUM_THRESHOLDS;k++) { // reset number of regions
-	        _numRegions[k]=0;
-	        _numRepresentants[k]=0;
-	        _representantRegionList[k] = null;
-	    } // reset number of regions
-
-	    // margins
-	    int xmin = (int)Math.floor(_leftMargin * img.getW());
-	    int xmax = (int)Math.ceil(_rightMargin * img.getW());
-	    int ymin = (int)Math.floor(_topMargin * img.getH());
-	    int ymax = (int)Math.ceil(_bottomMargin * img.getH());
-
-	    // search regions
-	    for (i=ymin;i<ymax;i++) {
-
-	        for (j=xmin;j<xmax;j++) {
-	            
-	            int level = img.getValue(i, j);
-
-	            for (k=0;k<_NUM_THRESHOLDS;k++) {                
-	                
-//	                #ifdef __DEBUG_REGIONS
-//	                System.println("%3d %3d \n",i,j);
-//	                #endif
-	                
-	                if (level > _thresholds[k]) { // is it a white point? yes => continue
-	                    _R[k][i][j] = null;
-	                    continue;
-	                } // is it a white pointc? yes => continue
-	                
-	                Region rUp = null;
-	                Region rLeft = null;
-
-	                if (j > 0) // left region
-	                   rLeft = _R[k][i][j-1];
-	                
-	                if (i > 0) // up region
-	                   rUp = _R[k][i-1][j];
-	                
-	                if (rUp != null && rLeft == null) { // only up region is defined
-//	                    #ifdef __DEBUG_REGIONS
-//	                    System.println("=up %p\n",rUp.representant);
-//	                    #endif
-
-	                    _R[k][i][j] = rUp.getRepresentant();
-	                    rUp.getRepresentant().addPointToRegion(i,j);
-	                }
-
-	                else if (rUp == null && rLeft != null) { // only left region is defined
-//	                    #ifdef __DEBUG_REGIONS
-//	                    System.println("=left %p\n",rLeft.representant);
-//	                    #endif
-
-	                    _R[k][i][j] = rLeft.getRepresentant();
-	                    rLeft.getRepresentant().addPointToRegion(i,j);
-	                }
-	                
-	                else if (rUp == null && rLeft== null) { // no regions are defined: new region creation
-
-	                   int newRegionIndex = _numRegions[k];
-
-	                   _numRegions[k]++;
-
-	                   Region r = new Region(newRegionIndex,i,j);
-	                   
-	                   _regions[k][newRegionIndex] = r;
-	                   _R[k][i][j] = r;
-
-	                   // link this new region to the representantRegionList
-	                   if (_representantRegionList[k] == null) {
-
-	                      _representantRegionList[k] = r;
-
-	                   }
-
-	                   else { // this region will be on the top of _representantRegionList[k]
-	                      Region head = _representantRegionList[k];
-	                      r.next = head;
-	                      head.previous = r;
-	                      _representantRegionList[k] = r;
-	                   }
-	                                      
-	                   _numRepresentants[k]++;
-
-	                } // no regions are defined: new region creation
-	                
-	                else if (rUp != null && rLeft != null) { // no regions are defined: new region creation
-	                     Region upRepresentant = rUp.representant;
-	                     Region leftRepresentant = rLeft.representant;
-	                     
-	                     // if these representants are the same then we link directly to it
-	                     if (upRepresentant == leftRepresentant) {
-	                        _R[k][i][j] = upRepresentant;
-	                        upRepresentant.addPointToRegion(i,j);
-
-//	                        #ifdef __DEBUG_REGIONS
-//	                        System.println("=up&left %p\n",upRepresentant);
-//	                        #endif
-	                     }
-	                     
-	                     // else we will add this point to the least index representant
-	                     else {
-
-//	                        #ifdef __DEBUG_REGIONS
-//	                        System.println("Merge %d %d\n",i,j);
-//	                        System.println("rLeft %p rUp %p\n",rLeft,rUp);
-//	                        System.println("rLeftRep %p rUpRep %p\n",leftRepresentant,upRepresentant);
-//	                        #endif
-
-	                        Region r = (upRepresentant.numChilds >= leftRepresentant.numChilds ? upRepresentant : leftRepresentant);
-	                        Region s = (upRepresentant.numChilds < leftRepresentant.numChilds ? upRepresentant : leftRepresentant);
-	                          
-	                        // add this point to minRepresentantRegion
-	                        _R[k][i][j] = r; 
-	                        r.addPointToRegion(i,j);
-	                        
-	                        // merge minRepresentantRegion to minRepresentantRegion
-	                        mergeRegions(r,s,k);
-	                        
-	                     }
-	                }                
+	            Region r;
+	            if (up == null && left == null) {          // new region
+	                r = new Region(all.size(), i, j);
+	                all.add(r);
 	            }
+	            else if (up != null && left != null && up != left) { // merge
+	                r = union(up, left);
+	                r.addPointToRegion(i, j);
+	            }
+	            else {
+	                r = (up != null ? up : left);
+	                r.addPointToRegion(i, j);
+	            }
+	            cur[j] = r;
 	        }
+
+	        Region tmp[] = prev; prev = cur; cur = tmp;
 	    }
 
-//	    for (k=0;k<_NUM_THRESHOLDS;k++) {                
-//	        System.out.format("found %d regions for threshold %d\n",_numRepresentants[k],_thresholds[k]);
-//	        Region r = _representantRegionList[k];
-//	        while (r != null) {
-//	            System.out.format("%d(%.3f,%.3f) ",r.index,r.centerx,r.centery);
-//	            r = r.next;
-//	        }
-//	        System.out.print("\n");
-//	    }
+	    // build the linked list of representants
+	    Region head = null;
+	    int numRepresentants = 0;
+	    for (Region r: all) {
+	        if (r.representant != r)
+	            continue;
+	        r.calculateCenter();
+	        r.flag = 0;
+	        r.next = head;
+	        r.previous = null;
+	        if (head != null)
+	            head.previous = r;
+	        head = r;
+	        numRepresentants++;
+	    }
 
+	    _lastNumRegions = all.size();
+	    _lastNumRepresentants = numRepresentants;
+
+	    return head;
 	}
+
+	public static int _lastNumRegions = 0;
+	public static int _lastNumRepresentants = 0;
+
+	/** union-find root with path compression */
+	private static Region representantOf(Region r) {
+	    if (r == null)
+	        return null;
+	    Region root = r;
+	    while (root.representant != root)
+	        root = root.representant;
+	    while (r.representant != root) { // path compression
+	        Region next = r.representant;
+	        r.representant = root;
+	        r = next;
+	    }
+	    return root;
+	}
+
+	/** merge two representant regions, the largest one absorbing the other */
+	private static Region union(Region a, Region b) {
+	    Region big   = (a.size >= b.size ? a : b);
+	    Region small = (a.size >= b.size ? b : a);
+
+	    big.size += small.size;
+	    big.sumx += small.sumx;
+	    big.sumy += small.sumy;
+	    big.minx = Math.min(big.minx, small.minx);
+	    big.maxx = Math.max(big.maxx, small.maxx);
+	    big.miny = Math.min(big.miny, small.miny);
+	    big.maxy = Math.max(big.maxy, small.maxy);
+	    big.numChilds += small.numChilds + 1;
+
+	    small.representant = big;
+	    small.size = 0;
+
+	    return big;
+	}
+
+	/**
+	 * Kept for compatibility: label the image for every configured
+	 * threshold at once. Prefer {@link #findRegions(Img,int)}, which is
+	 * lazy and therefore much cheaper.
+	 */
+	public static void thresholdMatrix(Img img) {
+	    for (int k = 0; k < _NUM_THRESHOLDS; k++) {
+	        _representantRegionList[k] = findRegions(img, _thresholds[k]);
+	        _numRegions[k] = _lastNumRegions;
+	        _numRepresentants[k] = _lastNumRepresentants;
+	    }
+	}
+
 
 	/******************************************************************************
 	 ** Valid Region definition ***************************************************
@@ -1523,164 +1217,6 @@ public class ProcessImage {
 
 	public static int _NUM_CLOSEST = 1;
 
-//
-	public static class Dist {
-	    Region region;
-	    double distance;  
-	    Dist next;      
-		public Dist(Region r, double distance) {
-			this.region = r;
-			this.distance = distance;
-			this.next = null;
-		}
-	}
-
-	public static class Ref {
-		double x;
-		double y;
-		
-		int numPoints;
-		
-		Dist points; // reference to the first point
-
-		public Ref(double x, double y) {
-			this.x = x;
-			this.y = y;
-			this.numPoints = 0;
-			this.points = null;     
-		}
-	
-		public boolean addRegionIfCloseEnough(Region region) {
-			double x = region.centerx;
-			double y = region.centery;
-			double sqrDist = (x - this.x) * (x - this.x) + (y - this.y) * (y - this.y);
-
-			//
-			if (_NUM_CLOSEST <= 0)
-				return false;
-			
-			// is it the first point?
-			if (this.points == null) {
-				this.points = new Dist(region,sqrDist);
-				this.numPoints++;
-				return true;
-			}
-
-			// find insertion point
-			Dist dd = this.points;  
-			Dist previous = null;
-			int index = 0;
-			while (dd != null && sqrDist < dd.distance) {
-				previous = dd;
-				dd = dd.next;
-				index++;
-			}
-			
-			// is it a point further then the maximum allowed? 
-			if (index >= _NUM_CLOSEST)
-				return false;
-			
-			// insert new point
-			Dist newd = new Dist(region,sqrDist);
-			if (index == 0) {
-				newd.next = dd;
-				this.points = newd;
-				this.numPoints++;
-			}
-			else {
-				newd.next = dd;
-				previous.next=newd;
-				this.numPoints++;
-			}
-			
-			// delete
-			dd = newd;  
-			while (dd != null && index < _NUM_CLOSEST) {
-				dd = dd.next;
-				index++;
-			}
-			if (dd != null)
-				dd.next = null;
-			
-			//
-			return true;
-			
-		}
-
-	}
-
-	public static Ref       _references[] = new Ref[NUM_REFERENCES];
-	public static double    _candidates[] = new double[NUM_REFERENCES * MAX_CLOSEST * 2];
-	public static Region    _candidatesRegion[] = new Region[NUM_REFERENCES * MAX_CLOSEST];
-	public static int       _numCandidates;
-
-//
-	public static void filterCandidates(int w, int h, Region r) {
-
-	    _numCandidates = 0;	   
-	    _references[0] = new Ref(0,0);
-	    _references[1] = new Ref(w,0);
-	    _references[2] = new Ref(w,h);
-	    _references[3] = new Ref(0,h);
-	    
-//	    #ifdef __DEBUG_CANDIDATES
-//	    System.println("start filtering...\n");
-//	    #endif
-
-	    while (r != null) { // keep valid centers that are closer to the reference points
-
-//	    	#ifdef __DEBUG_CANDIDATES
-//	        System.println("region %p\n",r);
-//	        #endif
-
-	        if (r.validRegion()) {
-	            r.calculateCenter();
-
-//	            #ifdef __DEBUG_CANDIDATES
-//	            System.println("=valid (%.3f,%.3f)\n",r.centerx,r.centery);
-//	            #endif
-	            
-	            int i;
-	            boolean status;
-	            for (i=0;i<NUM_REFERENCES;i++) {
-	                status = _references[i].addRegionIfCloseEnough(r);
-
-//	                #ifdef __DEBUG_CANDIDATES
-//	                if (status != 0) {
-//	                    System.println("=close enough to reference %d (%.3f,%.3f)\n",i,_references[i].x,_references[i].y);
-//	                }
-//	                #endif
-
-	            }
-	        }
-	        r = r.next;
-	    }
-
-//	    #ifdef __DEBUG_CANDIDATES
-//	    System.println("finished filtering...\n");
-//	    #endif
-	        
-	    int i;
-	    for (i=0;i<NUM_REFERENCES;i++) { // set _candidate points vector
-	        Dist d = _references[i].points;        
-	        while (d != null) {
-	           Region rr = d.region;  
-	           if (rr.flag == 0) {
-	              _candidates[2*_numCandidates]   = rr.centerx;
-	              _candidates[2*_numCandidates+1] = rr.centery;
-	              _candidatesRegion[_numCandidates] = rr;
-	              _numCandidates++;
-	              rr.flag = 1;
-	           }
-	           d = d.next;
-	        }
-	    }
-
-//	    #ifdef __DEBUG_CANDIDATES
-//	    System.println("finished candidates...\n");
-//	    #endif
-
-	}
 //
 //
 //

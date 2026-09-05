@@ -3,6 +3,7 @@ package mixnfix.gui;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -91,9 +92,22 @@ public class PanelCalibragemCorrecao extends JPanel {
     Timer _repaintRequest;
 
 
+    /**
+     * Build the calibration panel directly from the structure of an exam.
+     * Useful to run (and to test) the grading module without a database
+     * connection, e.g. in batch/headless mode.
+     */
+    public PanelCalibragemCorrecao(ProvaStructure prova) {
+        this(null, prova);
+    }
+
     public PanelCalibragemCorrecao(ModelProvaCorrecao provaCorrecao) {
+        this(provaCorrecao, provaCorrecao.getModelProva().getProvaStructure());
+    }
+
+    private PanelCalibragemCorrecao(ModelProvaCorrecao provaCorrecao, ProvaStructure prova) {
         _provaCorrecao = provaCorrecao;
-        _prova = provaCorrecao.getModelProva().getProvaStructure() ;
+        _prova = prova;
 
         JButton btnCorrigir = new JButton("Corrigir");
         btnCorrigir.addActionListener(new ActionListener() {
@@ -500,7 +514,7 @@ public class PanelCalibragemCorrecao extends JPanel {
         }
 
 
-        if (this._idAndCodeAvailable) { // variable part
+        if (this._idAndCodeAvailable && _gerador.getCellMapVariavel() != null) { // variable part
             Graphics2D g2 = (Graphics2D) g;
             java.util.List<Cell> cells = _gerador.getCellMapVariavel().getCells();
             for (Cell cell : cells) {
@@ -568,9 +582,36 @@ public class PanelCalibragemCorrecao extends JPanel {
 
     static byte _data[] = new byte[10000000];
 
-    private void corrigir() throws Exception {
+    /** the picture currently loaded in the panel. */
+    public File getFoto() { return _foto; }
+
+    /** the answer sheet generator built by the last successful "Corrigir". */
+    public GeradorFolhaRespostas getGerador() { return _gerador; }
+
+    /** the image currently loaded in the panel. */
+    public BufferedImage getImage() { return _image; }
+
+    /**
+     * Load the picture of an exam (same effect as pressing the "Foto"
+     * button, but without the file chooser).
+     */
+    public void setFoto(File foto) throws IOException {
+        _foto = foto;
+        _gerador = null;
+        _idAndCodeAvailable = false;
+        _image = (foto == null ? null : ImageIO.read(foto));
+        _thresholdValueOnImage = -1;
+        _panelDesenho.repaint();
+    }
+
+    /** routine associated with the "Corrigir" button. */
+    public void corrigir() throws Exception {
         GeradorFolhaRespostas g = new GeradorFolhaRespostas(_prova);
         _gerador = g;
+
+        // a new answer sheet was built: the ID and the marked cells of the
+        // previous picture (or of the previous run) are not valid anymore
+        _idAndCodeAvailable = false;
 
         CellMap map = g.getCellMapFixo();
         MFI2Java.newCellMap(map.getW(),map.getH(),50,1000);
@@ -606,11 +647,12 @@ public class PanelCalibragemCorrecao extends JPanel {
             _panelControls.getBottomMargin());
 
         double controlPoints[] = new double[1000];
+        _data = MFI2Java.ensureBuffer(_data, _image);
         MFI2Java.loadImageToBuffer(_image,_data);
         boolean b = MFI2Java.fitToImage(_data,_image.getWidth(),_image.getHeight(),controlPoints);
 
         if (!b) {
-            JOptionPane.showMessageDialog(this,"Não encontrei os pontos de controle com as restrições dadas!");
+            message("Não encontrei os pontos de controle com as restrições dadas!");
             _gerador = null;
             return;
         }
@@ -619,13 +661,17 @@ public class PanelCalibragemCorrecao extends JPanel {
             cp.setImageXY(controlPoints[2*cp.getId()],controlPoints[2*cp.getId()+1]);
         }
 
+        // export the composed verification image (grey scale exam frame +
+        // the detected control points painted in yellow)
+        saveComposedImage(null);
     }
 
 
 
-    private void findIDandMFCode() throws Exception {
+    /** routine associated with the "ID &amp; Code" button. */
+    public void findIDandMFCode() throws Exception {
         if (_gerador == null) {
-            JOptionPane.showMessageDialog(this, "No CellMap Yet! Ooooops! ");
+            message("No CellMap Yet! Ooooops! ");
             return;
         }
 
@@ -717,7 +763,7 @@ public class PanelCalibragemCorrecao extends JPanel {
 
         } // calcular os campos marcados para cada quesito
 
-        JOptionPane.showMessageDialog(this,"O identificador do aluno é: "+idAluno+"\nO indice da prova é: "+indice+"\n o tipo da prova é: "+tipo);
+        message("O identificador do aluno é: "+idAluno+"\nO indice da prova é: "+indice+"\n o tipo da prova é: "+tipo);
         _idAndCodeAvailable = true;
     }
 
@@ -726,7 +772,7 @@ public class PanelCalibragemCorrecao extends JPanel {
     private void adicionarCorrecaoAssociandoAlunoManualmente() {
 
         if (!_idAndCodeAvailable || _gerador==null)  {
-            JOptionPane.showMessageDialog(this,"Campos não inicializados!");
+            message("Campos não inicializados!");
             return;
         }
 
@@ -771,10 +817,101 @@ public class PanelCalibragemCorrecao extends JPanel {
             ex.printStackTrace();
         }
 
-        JOptionPane.showMessageDialog(this,"Correção associada ao aluno "+mapc.getAluno().getMatricula()+" "+mapc.getAluno().getNome());
+        message("Correção associada ao aluno "+mapc.getAluno().getMatricula()+" "+mapc.getAluno().getNome());
 
     }
 
+
+
+    // ------------------------------------------------------------------
+    // helpers used both by the interactive and by the batch/headless usage
+    // ------------------------------------------------------------------
+
+    /**
+     * Show a message to the user. When there is no display (batch or
+     * headless grading) the message is simply logged, so that the grading
+     * module can be run without a graphical environment.
+     */
+    private void message(String text) {
+        if (java.awt.GraphicsEnvironment.isHeadless()) {
+            System.out.println(text);
+            return;
+        }
+        JOptionPane.showMessageDialog(this, text);
+    }
+
+    /**
+     * Directory where the verification images are written. It can be
+     * changed with the system property <code>mixnfix.output.dir</code>.
+     */
+    public static String getOutputDir() {
+        return mixnfix.VisualizationExporter.getOutputDir();
+    }
+
+    /**
+     * Compose the grey scale (black and white) picture of the exam with
+     * the control points found by the grading module, painted in yellow,
+     * and save it as a JPG file inside {@link #getOutputDir()}.
+     *
+     * @param name file name (without extension); when null the name of
+     *             the picture being graded is used
+     * @return the file that was written, or null
+     */
+    public File saveComposedImage(String name) {
+        if (_image == null || _gerador == null)
+            return null;
+        java.util.List<ControlPoint> cps = _gerador.getCellMapFixo().getControlPoints();
+        double xy[] = new double[2 * cps.size()];
+        int i = 0;
+        for (ControlPoint cp: cps) {
+            xy[i++] = cp.getImageX();
+            xy[i++] = cp.getImageY();
+        }
+        return mixnfix.VisualizationExporter.saveComposed(
+            _image, xy, cps.size(),
+            (name != null ? name : (_foto != null ? _foto.getName() : "composed_result")));
+    }
+
+    /** recursively lay out a component tree that has no native peer. */
+    private static void layoutTree(Component c) {
+        if (c instanceof Container) {
+            Container container = (Container) c;
+            container.doLayout();
+            for (Component child : container.getComponents())
+                layoutTree(child);
+        }
+    }
+
+    /**
+     * Render this panel (the grading GUI frame) into an image file. Used
+     * to document the state of the interface after "Corrigir" and after
+     * "ID &amp; Code" without requiring a display.
+     */
+    public File saveGUIImage(String name, int width, int height) {
+        try {
+            this.setSize(width, height);
+            // Component.validate() only lays out a tree that has native
+            // peers; when rendering off screen (batch/headless) the layout
+            // has to be triggered explicitly.
+            layoutTree(this);
+            BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+            Graphics2D g2 = img.createGraphics();
+            g2.setColor(Color.WHITE);
+            g2.fillRect(0, 0, width, height);
+            this.printAll(g2);
+            g2.dispose();
+            File dir = new File(getOutputDir());
+            dir.mkdirs();
+            File out = new File(dir, name + ".jpg");
+            ImageIO.write(img, "jpg", out);
+            System.out.println("GUI image written to " + out.getAbsolutePath());
+            return out;
+        }
+        catch (Exception ex) {
+            ex.printStackTrace();
+            return null;
+        }
+    }
 
 }
 

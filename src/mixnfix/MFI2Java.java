@@ -123,7 +123,13 @@ public class MFI2Java {
  
         // initialize image
         _img = new ProcessImage.Img();
-       
+
+        // pictures taken with modern cameras easily exceed the old fixed
+        // 1 megapixel buffer: grow it on demand instead of crashing
+        int numPixels = width * height;
+        if (_imgdata.length < numPixels)
+            _imgdata = new int[numPixels];
+
         for (int i=0;i<height;i++)
             for (int j=0;j<width;j++)
             	_imgdata[i*width+j] = 0xFF & data[i*width+j];
@@ -172,6 +178,18 @@ public class MFI2Java {
     }
 
     static byte _data[] = new byte[10000000];
+
+    /**
+     * Make sure the grey level buffer is big enough for this picture,
+     * allocating a new one when it is not (pictures of modern cameras can
+     * be much bigger than the historical fixed size buffers).
+     */
+    public static byte[] ensureBuffer(byte[] data, BufferedImage image) {
+        int needed = image.getWidth() * image.getHeight();
+        if (data == null || data.length < needed)
+            return new byte[needed];
+        return data;
+    }
 
     public static void loadImageToBuffer(BufferedImage image, byte[] data) {
         int w = image.getWidth();

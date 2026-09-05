@@ -3013,6 +3013,7 @@ class MFActionColetarQuestionarios extends AbstractAction {
         BufferedImage image = ImageIO.read(fotoFile);
 
         double controlPoints[] = new double[1000];
+        _data = MFI2Java.ensureBuffer(_data, image);
         MFI2Java.loadImageToBuffer(image, _data);
         boolean b = MFI2Java.fitToImage(_data, image.getWidth(), image.getHeight(), controlPoints);
 
@@ -3436,6 +3437,7 @@ class MFActionColetarProvas extends AbstractAction {
         BufferedImage image = ImageIO.read(fotoFile);
 
         double controlPoints[] = new double[1000];
+        _data = MFI2Java.ensureBuffer(_data, image);
         MFI2Java.loadImageToBuffer(image, _data);
         boolean b = MFI2Java.fitToImage(_data, image.getWidth(), image.getHeight(), controlPoints);
 

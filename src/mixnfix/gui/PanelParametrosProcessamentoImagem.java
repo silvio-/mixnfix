@@ -45,23 +45,23 @@ class PanelParametrosProcessamentoImagem extends JPanel {
         i++;
 
         this.add(new JLabel("Min-Max Pixel Width:"),new GridBagConstraints(0,i,1,1,0,0,GridBagConstraints.EAST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
-        _tfMinPixelWidth = new Input(App.getConfiguracao(),"minPixelWidth","3",Input.TF_INTEIRO,50);
+        _tfMinPixelWidth = new Input(App.getConfiguracao(),"minPixelWidth","2",Input.TF_INTEIRO,50);
         this.add(_tfMinPixelWidth,new GridBagConstraints(1,i,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         _tfMaxPixelWidth = new Input(App.getConfiguracao(),"maxPixelWidth","15",Input.TF_INTEIRO,50);
         this.add(_tfMaxPixelWidth,new GridBagConstraints(2,i,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         i++;
 
         this.add(new JLabel("Min-Max Pixel Height:"),new GridBagConstraints(0,i,1,1,0,0,GridBagConstraints.EAST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
-        _tfMinPixelHeight = new Input(App.getConfiguracao(),"minPixelWidth","3",Input.TF_INTEIRO,50);
+        _tfMinPixelHeight = new Input(App.getConfiguracao(),"minPixelHeight","2",Input.TF_INTEIRO,50);
         this.add(_tfMinPixelHeight,new GridBagConstraints(1,i,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         _tfMaxPixelHeight = new Input(App.getConfiguracao(),"maxPixelHeight","15",Input.TF_INTEIRO,50);
         this.add(_tfMaxPixelHeight,new GridBagConstraints(2,i,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         i++;
 
         this.add(new JLabel("Min-Max Num Pixels:"),new GridBagConstraints(0,i,1,1,0,0,GridBagConstraints.EAST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
-        _tfMinNumPixels = new Input(App.getConfiguracao(),"minNumPixels","3",Input.TF_INTEIRO,50);
+        _tfMinNumPixels = new Input(App.getConfiguracao(),"minNumPixels","4",Input.TF_INTEIRO,50);
         this.add(_tfMinNumPixels,new GridBagConstraints(1,i,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
-        _tfMaxNumPixels = new Input(App.getConfiguracao(),"maxNumPixels","15",Input.TF_INTEIRO,50);
+        _tfMaxNumPixels = new Input(App.getConfiguracao(),"maxNumPixels","120",Input.TF_INTEIRO,50);
         this.add(_tfMaxNumPixels,new GridBagConstraints(2,i,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         i++;
 
@@ -91,12 +91,12 @@ class PanelParametrosProcessamentoImagem extends JPanel {
         i++;
 
         this.add(new JLabel("Correct Side Ratio:"),new GridBagConstraints(0,i,1,1,0,0,GridBagConstraints.EAST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
-        this._tfCorrectSideRatio = new Input(App.getConfiguracao(),"correctSideRatio","30",Input.TF_FLOAT,50);
+        this._tfCorrectSideRatio = new Input(App.getConfiguracao(),"correctSideRatio","1.0",Input.TF_FLOAT,50);
         this.add(_tfCorrectSideRatio,new GridBagConstraints(1,i,2,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         i++;
 
         this.add(new JLabel("Side Ratio Tolerance:"),new GridBagConstraints(0,i,1,1,0,0,GridBagConstraints.EAST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
-        this._tfSideRatioTolerance = new Input(App.getConfiguracao(),"correctSideRatio","0.9",Input.TF_FLOAT,50);
+        this._tfSideRatioTolerance = new Input(App.getConfiguracao(),"sideRatioTolerance","0.9",Input.TF_FLOAT,50);
         this.add(_tfSideRatioTolerance,new GridBagConstraints(1,i,2,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         i++;
 
@@ -126,7 +126,7 @@ class PanelParametrosProcessamentoImagem extends JPanel {
         i++;
 
         this.add(new JLabel("Right Margin:"),new GridBagConstraints(0,i,1,1,0,0,GridBagConstraints.EAST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
-        this._tfRightMargin = new Input(App.getConfiguracao(),"searchRegionRightMargin","0",Input.TF_FLOAT,50);
+        this._tfRightMargin = new Input(App.getConfiguracao(),"searchRegionRightMargin","1",Input.TF_FLOAT,50);
         this.add(_tfRightMargin,new GridBagConstraints(1,i,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         i++;
 
@@ -136,7 +136,7 @@ class PanelParametrosProcessamentoImagem extends JPanel {
         i++;
 
         this.add(new JLabel("Bottom Margin:"),new GridBagConstraints(0,i,1,1,0,0,GridBagConstraints.EAST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
-        this._tfBottomMargin = new Input(App.getConfiguracao(),"searchRegionBottomMargin","0",Input.TF_FLOAT,50);
+        this._tfBottomMargin = new Input(App.getConfiguracao(),"searchRegionBottomMargin","1",Input.TF_FLOAT,50);
         this.add(_tfBottomMargin,new GridBagConstraints(1,i,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         i++;
 

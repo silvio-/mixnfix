@@ -826,6 +826,7 @@ public class PanelProvaCorrecao extends JPanel {
         BufferedImage image = ImageIO.read(fotoFile);
 
         double controlPoints[] = new double[1000];
+        _data = MFI2Java.ensureBuffer(_data, image);
         MFI2Java.loadImageToBuffer(image, _data);
         boolean b = MFI2Java.fitToImage(_data, image.getWidth(), image.getHeight(), controlPoints);
 
@@ -838,6 +839,11 @@ public class PanelProvaCorrecao extends JPanel {
         for (ControlPoint cp : mapFixo.getControlPoints()) {
             cp.setImageXY(controlPoints[2 * cp.getId()], controlPoints[2 * cp.getId() + 1]);
         }
+
+        // save the composed verification image of this frame: the grey
+        // scale exam with the control points painted in yellow
+        mixnfix.VisualizationExporter.saveComposed(image, controlPoints,
+            mapFixo.getNumControlPoints(), fotoFile.getName());
 
         // data to save on buffer
         PanelParametrosProcessamentoImagem _params = new PanelParametrosProcessamentoImagem();

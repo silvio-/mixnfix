@@ -56,3 +56,76 @@ Left, Right, Top, Bottom Margins
    
 
       
+
+===========================================================================
+Grading module: control point detection (2025 fix)
+===========================================================================
+
+Bug
+---
+Pictures of severely (perspectively) deformed exams were rejected: the
+grading module could not find the 21 control dots and answered "Nao
+encontrei os pontos de controle com as restricoes dadas!".
+
+Cause
+-----
+The four outer dots were searched with a combinatorial O(n^4) enumeration
+of the blobs closest to the four corners of the picture, accepting only
+quadrilaterals that were almost *rectangles*: corners of 90 degrees within
+"Angle Tolerance", a prescribed "Correct Side Ratio" and a parallelogram
+test ("Target Radius"). None of these is invariant under a projective
+transformation, so a picture taken from an oblique point of view (where
+the outer quadrilateral has no right angle, no parallel sides and no fixed
+side ratio) never satisfied them.
+
+Fix (mixnfix/ControlPointDetector.java)
+---------------------------------------
+The rectangle hypotheses were replaced by a projective search:
+
+  1. every valid blob is a dot candidate (no corner-of-the-picture bias);
+  2. the extreme points of the cloud are computed with a convex hull
+     (a second hull layer is peeled when needed): under any perspective
+     the four outer dots are extreme points;
+  3. quadrilaterals of extreme points are enumerated by decreasing area
+     and each one (4 rotations) defines a homography from the theoretical
+     sheet to the picture;
+  4. a hypothesis is scored by mapping *all* 21 theoretical control points
+     and counting how many fall on a detected blob - a verification that
+     is invariant under perspective;
+  5. a local RANSAC over the matched dots plus a least squares homography
+     refinement give the final, sub pixel accurate mapping; missing dots
+     (too faint at that threshold) are predicted by the homography, which
+     is exact for a planar target.
+
+Efficiency
+----------
+  * connected components are now computed for one threshold at a time with
+    a union-find over two scan lines (the old code kept a static
+    8 x 1000 x 1000 matrix of region references, ~64 MB, and always
+    labelled the image for the 8 thresholds);
+  * the search stops at the first threshold that yields a complete and
+    accurate grid;
+  * nearest blob queries use a uniform spatial hash grid, hypotheses are
+    bounded and pruned by area with a branch and bound cut on the score.
+  * pictures are no longer limited to 1000x1000 pixels.
+
+Typical cost on the sample exams (423x517 and 425x550): about 30-60 ms of
+cpu time per exam for the whole "Corrigir" step.
+
+Verification output
+-------------------
+Every graded frame is exported to $mixnfix.output.dir (default /app/output)
+as <picture>.jpg: the grey scale (black and white) exam frame with the
+detected control points painted in yellow.
+
+  ./scripts/run_grading_test.sh       # composed images, GUI images, cpu times
+  ./scripts/run_robustness_test.sh    # warps, enlarged pictures, regression
+
+run_grading_test.sh calls, for the weakly deformed (img2.jpg) and for the
+severely deformed (img1.jpg) exam, the routines associated with the
+"Corrigir" and "ID & Code" buttons of the grading GUI and writes:
+
+  /app/output/img1.jpg, img2.jpg, composed_result.jpg
+  /app/output/gui_img1_corrigir.jpg, gui_img1_id_code.jpg
+  /app/output/gui_img2_corrigir.jpg, gui_img2_id_code.jpg
+  /app/output/grading_cpu_times.txt

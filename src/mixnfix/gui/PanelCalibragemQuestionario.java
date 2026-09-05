@@ -560,6 +560,7 @@ public class PanelCalibragemQuestionario extends JPanel {
             _panelControls.getBottomMargin());
 
         double controlPoints[] = new double[1000];
+        _data = MFI2Java.ensureBuffer(_data, _image);
         MFI2Java.loadImageToBuffer(_image,_data);
         boolean b = MFI2Java.fitToImage(_data,_image.getWidth(),_image.getHeight(),controlPoints);
 
