@@ -107,7 +107,7 @@ public class QuestionarioUI {
         java.util.List<Quesito> quesitos = _prova.getQuesitosPermutados();
         int i = 1;
         for (Quesito q : quesitos) {
-            if (q.getTipo() == Quesito.TIPO_ALTERNATIVAS || q.getTipo() == Quesito.TIPO_SUBJETIVA_5) {
+            if (q.getTipo() == Quesito.TIPO_ALTERNATIVAS || q.getTipo() == Quesito.TIPO_SUBJETIVA_5 || q.getTipo() == Quesito.TIPO_SUBJETIVA_9) {
                 java.util.List<Integer> l = q.getRespostaAluno();
                 OptionField f = (OptionField) _cellMapVariavel.getField(""+i);
                 for (int value: l) {

@@ -28,6 +28,9 @@ import mixnfix.ModelListener;
 public class PanelProva  extends JPanel {
     private ModelProva _modelProva;
     private JTabbedPane _tabPane;
+
+    /** exposes the tabbed pane ("Estrutura" + correction/collection tabs); used by headless test/screenshot tooling. */
+    public JTabbedPane getTabPane() { return _tabPane; }
     private HashMap<Model,Component> _map;
     public PanelProva(ModelProva modelProva) throws SQLException {
 

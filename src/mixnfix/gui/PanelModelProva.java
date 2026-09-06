@@ -47,6 +47,12 @@ public class PanelModelProva extends JPanel {
     private JSplitPane _splitPane;
     private MFTree _tree;
 
+    /** exposes the internal structure tree; used by headless test/screenshot tooling. */
+    public MFTree getTree() { return _tree; }
+
+    /** exposes the split pane (tree + node editor); used by headless test/screenshot tooling. */
+    public JSplitPane getSplitPane() { return _splitPane; }
+
     private JButton _btnLockUnlock = new JButton();
     private JButton _btnAddGrupo = new JButton();
     private JButton _btnAddQuesito = new JButton();

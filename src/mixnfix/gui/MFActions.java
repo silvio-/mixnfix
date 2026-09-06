@@ -1150,6 +1150,9 @@ class MFActionAdicionarQuesito
         else if (p.getTipoQuesito() == PanelCriarQuesito.ID_SUBJETIVO) {
             q.setTipo(Quesito.TIPO_SUBJETIVA_5);
         }
+        else if (p.getTipoQuesito() == PanelCriarQuesito.ID_SUBJETIVO_9) {
+            q.setTipo(Quesito.TIPO_SUBJETIVA_9);
+        }
         else throw new RuntimeException("Tipo de quesito inválido");
 
         q.setValorAcerto(p.getValorAcerto());
@@ -1760,6 +1763,9 @@ class MFActionChangeQuesitoValues
             case Quesito.TIPO_SUBJETIVA_5:
                 tipo = PanelCriarQuesito.ID_SUBJETIVO;
                 break;
+            case Quesito.TIPO_SUBJETIVA_9:
+                tipo = PanelCriarQuesito.ID_SUBJETIVO_9;
+                break;
         }
         PanelCriarQuesito p = new PanelCriarQuesito();
         p.set(_quesito.getTag(), tipo, (double) _quesito.getValorAcerto(), (double) _quesito.getValorFalha(), _quesito.getItensCount());
@@ -1779,6 +1785,9 @@ class MFActionChangeQuesitoValues
         }
         else if (p.getTipoQuesito() == PanelCriarQuesito.ID_SUBJETIVO) {
             _quesito.setTipo(Quesito.TIPO_SUBJETIVA_5);
+        }
+        else if (p.getTipoQuesito() == PanelCriarQuesito.ID_SUBJETIVO_9) {
+            _quesito.setTipo(Quesito.TIPO_SUBJETIVA_9);
         }
         else throw new RuntimeException("Tipo de quesito inválido");
 

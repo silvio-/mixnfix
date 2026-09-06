@@ -180,6 +180,8 @@ public class FolhaRespostaQuestionarioBasico implements IFolhaResposta {
                 _questoes.add(new FRNumerico(numQuesito++, q.getNumDigitosQuesitoNumerico()));
             else if (q.getTipo() == Quesito.TIPO_SUBJETIVA_5)
                 _questoes.add(new FRSubjetiva(numQuesito++,5));
+            else if (q.getTipo() == Quesito.TIPO_SUBJETIVA_9)
+                _questoes.add(new FRSubjetiva(numQuesito++,9));
         }
 
         double y1 = Y0 + GAP_CONTROLO_QUESTOES; //

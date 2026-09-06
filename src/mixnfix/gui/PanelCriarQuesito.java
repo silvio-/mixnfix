@@ -21,11 +21,13 @@ class PanelCriarQuesito extends JPanel {
     public static final String FALSO_VERDADEIRO = "falso/verdadeiro";
     public static final String NUMERICO = "numérico_99";
     public static final String SUBJETIVO = "subjetiva_5";
+    public static final String SUBJETIVO_9 = "subjetiva_9";
 
     public static final int ID_ALTERNATIVAS = 0;
     public static final int ID_FALSO_VERDADEIRO = 1;
     public static final int ID_NUMERICO = 2;
     public static final int ID_SUBJETIVO = 3;
+    public static final int ID_SUBJETIVO_9 = 4;
 
     Input _tfTag;
     InputComboBox _cbInputTipo;
@@ -57,7 +59,7 @@ class PanelCriarQuesito extends JPanel {
         i++;
 
         this.add(new JLabel("Tipo Quesito:"),new GridBagConstraints(0,i,1,1,0,0,GridBagConstraints.EAST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
-        _cbInputTipo = new InputComboBox(App.getConfiguracao(),"tipoquesito",new String[] {ALTERNATIVAS,FALSO_VERDADEIRO,NUMERICO,SUBJETIVO},0,150);
+        _cbInputTipo = new InputComboBox(App.getConfiguracao(),"tipoquesito",new String[] {ALTERNATIVAS,FALSO_VERDADEIRO,NUMERICO,SUBJETIVO,SUBJETIVO_9},0,150);
         this.add(_cbInputTipo,new GridBagConstraints(1,i,2,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(2,2,2,2),0,0));
         i++;
 

@@ -192,6 +192,8 @@ public class GeradorFolhaRespostas implements IFolhaResposta {
                 _questoes.add(new FRNumerico(numQuesito++, 2));
             else if (q.getTipo() == Quesito.TIPO_SUBJETIVA_5)
                 _questoes.add(new FRSubjetiva(numQuesito++, 5));
+            else if (q.getTipo() == Quesito.TIPO_SUBJETIVA_9)
+                _questoes.add(new FRSubjetiva(numQuesito++, 9));
         }
 
         double y1 = _id.getY1() + GAP_CONTROLO_QUESTOES; //

@@ -93,6 +93,7 @@ public class Quesito extends NoProvaPermutavel {
     public static final int TIPO_FALSO_VERDADEIRO = 2;
     public static final int TIPO_NUMERICO_99 = 3;
     public static final int TIPO_SUBJETIVA_5 = 4;
+    public static final int TIPO_SUBJETIVA_9 = 5;
 
     private Integer _tipo;
     public int getTipo() {
@@ -108,6 +109,8 @@ public class Quesito extends NoProvaPermutavel {
                 _tipo=TIPO_NUMERICO_99;
             else if ("subjetiva_5".equals(st))
                 _tipo=TIPO_SUBJETIVA_5;
+            else if ("subjetiva_9".equals(st))
+                _tipo=TIPO_SUBJETIVA_9;
             else
                 _tipo=TIPO_DESCONHECIDO;
         }
@@ -158,6 +161,10 @@ public class Quesito extends NoProvaPermutavel {
             case TIPO_SUBJETIVA_5:
                 _tipo = TIPO_SUBJETIVA_5;
                 this.setProperty("tipo","subjetiva_5");
+                break;
+            case TIPO_SUBJETIVA_9:
+                _tipo = TIPO_SUBJETIVA_9;
+                this.setProperty("tipo","subjetiva_9");
                 break;
         }
         this.fireModelUpdate();
@@ -364,14 +371,14 @@ public class Quesito extends NoProvaPermutavel {
         // ----------- NUMERICO ---------------}
 
         // {----------- SUBJETIVO ---------------
-        else if (this.getTipo() == TIPO_SUBJETIVA_5) {
+        else if (this.getTipo() == TIPO_SUBJETIVA_5 || this.getTipo() == TIPO_SUBJETIVA_9) {
             if (_respostaAluno.size() != 1) {
                 _nota = 0;
             }
             else {
                 int i = _respostaAluno.get(0);
-                int n = this.getItensCount();
-                _nota = (i * this.getValorAcerto()) / (double) (4);
+                int divisor = (this.getTipo() == TIPO_SUBJETIVA_9) ? 8 : 4;
+                _nota = (i * this.getValorAcerto()) / (double) (divisor);
             }
         }
         //  ----------- SUBJETIVO ---------------}
@@ -499,10 +506,11 @@ public class Quesito extends NoProvaPermutavel {
         // ----------- TIPO_NUMERICO_99 ---------------}
 
         // {----------- SUBJETIVO ---------------
-        if (this.getTipo() == TIPO_SUBJETIVA_5) {
+        if (this.getTipo() == TIPO_SUBJETIVA_5 || this.getTipo() == TIPO_SUBJETIVA_9) {
             if (_respostaAluno.size() > 0) {
                 int i = _respostaAluno.get(0);
-                student+=i+"/4";
+                int divisor = (this.getTipo() == TIPO_SUBJETIVA_9) ? 8 : 4;
+                student+=i+"/"+divisor;
             }
         }
         // ----------- SUBJETIVO ---------------}
@@ -566,7 +574,7 @@ public class Quesito extends NoProvaPermutavel {
         // ----------- TIPO_NUMERICO_99 ---------------}
 
         // {----------- SUBJETIVO ---------------
-        else if (this.getTipo() == TIPO_SUBJETIVA_5) {
+        else if (this.getTipo() == TIPO_SUBJETIVA_5 || this.getTipo() == TIPO_SUBJETIVA_9) {
         }
         // ----------- SUBJETIVO ---------------}
 
@@ -613,7 +621,7 @@ public class Quesito extends NoProvaPermutavel {
         // ----------- TIPO_NUMERICO_99 ---------------}
 
         // {----------- SUBJETIVO ---------------
-        else if (this.getTipo() == TIPO_SUBJETIVA_5) {
+        else if (this.getTipo() == TIPO_SUBJETIVA_5 || this.getTipo() == TIPO_SUBJETIVA_9) {
         }
         // ----------- SUBJETIVO ---------------}
 

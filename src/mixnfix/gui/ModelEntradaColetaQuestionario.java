@@ -62,7 +62,7 @@ public class ModelEntradaColetaQuestionario extends Model {
             int i=1;
             for (Quesito q: quesitos) {
                 q.clearRespostaAluno();
-                if (q.getTipo() == Quesito.TIPO_ALTERNATIVAS || q.getTipo() == Quesito.TIPO_SUBJETIVA_5) {
+                if (q.getTipo() == Quesito.TIPO_ALTERNATIVAS || q.getTipo() == Quesito.TIPO_SUBJETIVA_5 || q.getTipo() == Quesito.TIPO_SUBJETIVA_9) {
                     Integer value = gabarito.get(""+i);
                     if (value != null && value >= 0)
                         q.addRespostaAluno(value);

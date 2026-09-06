@@ -129,3 +129,86 @@ severely deformed (img1.jpg) exam, the routines associated with the
   /app/output/gui_img1_corrigir.jpg, gui_img1_id_code.jpg
   /app/output/gui_img2_corrigir.jpg, gui_img2_id_code.jpg
   /app/output/grading_cpu_times.txt
+
+===========================================================================
+New question type: Subjetiva_9 (2026 addition)
+===========================================================================
+
+A new question type was added, "Subjetiva_9", analogous to the existing
+"Subjetiva_5" but with 9 gradable levels instead of 5 (the teacher marks one
+of 0, 1/8, 2/8, ..., 7/8, 1 of the question's value, instead of one of
+0, 1/4, 2/4, 3/4, 1).
+
+Every place that depended on the list of question types was updated:
+
+  * mixnfix/prova/Quesito.java
+      - Quesito.TIPO_SUBJETIVA_9 constant, getTipo()/setTipo() persistence
+        ("subjetiva_9" property value), detalharNota()/avaliarNota() (the
+        marking -> grade conversion, dividing by 8 instead of 4),
+        getTextRespostaAluno()/getTextRespostaCorreta() (kept as a no-op,
+        same as Subjetiva_5: there is no predefined "correct answer", the
+        teacher grades by hand).
+  * mixnfix/gui/PanelCriarQuesito.java, mixnfix/gui/MFActions.java
+      - "Tipo Quesito" combo box (ID_SUBJETIVO_9/SUBJETIVO_9) in the
+        "Adicionar Quesito"/"Alterar valores da questão" dialogs.
+  * mixnfix/folharesposta/FolhaRespostaQuestionarioBasico.java,
+    mixnfix/folharesposta/GeradorFolhaRespostas.java
+      - the response-sheet builders instantiate FRSubjetiva(numQuesito, 9)
+        (the FRSubjetiva inner class already took the number of markable
+        items as a parameter, so it needed no further change besides being
+        called with 9 instead of 5).
+  * mixnfix/gui/QuestionarioUI.java, mixnfix/gui/CorrecaoUI.java,
+    mixnfix/gui/ModelEntradaColetaQuestionario.java,
+    mixnfix/gui/ModelEntradaProvaCorrecao.java
+      - wherever TIPO_ALTERNATIVAS/TIPO_SUBJETIVA_5 were handled together
+        (single-choice OptionField, one out of N cells), TIPO_SUBJETIVA_9
+        was added to the same code path (mixnfix/folharesposta/OptionField
+        itself is already generic on the number of cells, so no change was
+        needed there).
+
+Validation / screenshots
+-------------------------
+tools/DemoSubjetiva9.java (+ tools/ExamPdfFallback.java) is a headless
+driver, in the same spirit as tools/GradingGUIRun.java, that exercises the
+*real* Swing panels (PanelCriarQuesito, PanelModelProva, PanelProva,
+PanelCalibragemCorrecao, MFTree/MFTreeModel, ...) end-to-end:
+
+  1. creates a folder ("Adicionar Pasta") and imports AVLC-2-2025-EE3.prova
+     ("Importar Prova");
+  2. opens "Adicionar Quesito" over "Cabeçalho", forces the "Tipo Quesito"
+     combo box's drop down open (all 5 types, including the new
+     "subjetiva_9") and renders the whole composite UI;
+  3. picks "subjetiva_9", adds the question to the exam and renders the UI
+     with the new question selected in the central panel;
+  4. produces the exam's PDF ("Produzir Prova" / "Produzir") and rasterizes
+     it to an image;
+  5. adds a "Correção" ("Adicionar Correção"), opens its calibration panel,
+     loads the PDF produced in the previous step via "Foto", and renders a
+     snapshot of the whole UI.
+
+Because this sandbox has neither a display server nor pdflatex/epstopdf
+(and no network access to install a LaTeX toolchain), two adaptations were
+made, both documented at the top of tools/DemoSubjetiva9.java and
+tools/ExamPdfFallback.java: (a) every panel/dialog/popup is rendered off
+screen with Component.printAll(), never Window.setVisible(); (b) the exam
+PDF is produced by a small, self-contained, valid PDF writer instead of
+pdflatex, listing the exam header and every question's text (extracted
+through the real mixnfix.prova.PanelPapel component).
+
+Usage:
+
+  ./build.sh
+  ./initdb.sh
+  javac -encoding UTF-8 -cp "bin:lib/derby.jar:lib/jxl.jar" -sourcepath src \
+        -d bin tools/DemoSubjetiva9.java tools/ExamPdfFallback.java
+  cd src && java -Djava.awt.headless=true \
+        --add-opens java.desktop/javax.swing.plaf.basic=ALL-UNNAMED \
+        -cp "../bin:../lib/derby.jar:../lib/jxl.jar" mixnfix.gui.DemoSubjetiva9
+
+Output (in /app/output by default):
+
+  subjetiva9_step1_tipo_quesito_dropdown.jpg
+  subjetiva9_step2_question_added_and_selected.jpg
+  subjetiva9_step3_pdf_render.jpg
+  subjetiva9_step4_correcao_calibragem.jpg
+  subjetiva9_exam.pdf, subjetiva9_exam_source.txt
