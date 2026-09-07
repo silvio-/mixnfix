@@ -246,50 +246,8 @@ public class PanelProvaCorrecao extends JPanel {
         _listModelEntradas = new DefaultListModel();
 
 
-        ArrayList<ModelAlunoProvaCorrecao> listAlunoProvaCorrecao = new ArrayList<ModelAlunoProvaCorrecao>(_modelProvaCorrecao.getAlunosProvaCorrecao());
-        Collections.sort(listAlunoProvaCorrecao,new Comparator() {
-            public int compare(Object o1, Object o2) {
-                ModelAlunoProvaCorrecao a = (ModelAlunoProvaCorrecao) o1;
-                ModelAlunoProvaCorrecao b = (ModelAlunoProvaCorrecao) o2;
-                return a.getAluno().getNome().compareTo(b.getAluno().getNome());
-            }
-            public boolean equals(Object obj) {
-                return false;
-            }
-        });
-
-        ArrayList<Aluno> listAlunoSemEntrada = new ArrayList<Aluno>(_modelProvaCorrecao.getAlunosSemEntradas());
-        Collections.sort(listAlunoSemEntrada,new Comparator() {
-            public int compare(Object o1, Object o2) {
-                Aluno a = (Aluno) o1;
-                Aluno b = (Aluno) o2;
-                return a.getNome().compareTo(b.getNome());
-            }
-            public boolean equals(Object obj) {
-                return false;
-            }
-        });
-
-        ArrayList<ModelEntradaProvaCorrecao> listEntradaProvaCorrecao = new ArrayList<ModelEntradaProvaCorrecao>(_modelProvaCorrecao.getEntradasProvaCorrecao());
-        Collections.sort(listEntradaProvaCorrecao,new Comparator() {
-            public int compare(Object o1, Object o2) {
-                ModelEntradaProvaCorrecao a = (ModelEntradaProvaCorrecao) o1;
-                ModelEntradaProvaCorrecao b = (ModelEntradaProvaCorrecao) o2;
-                if (a.getAluno() != null && b.getAluno() != null) {
-                    return a.getAluno().getNome().compareTo(b.getAluno().getNome());
-                }
-                else if (a.getAluno() != null) return -1;
-                else if (b.getAluno() != null) return 1;
-                else return 0;
-            }
-            public boolean equals(Object obj) {
-                return false;
-            }
-        });
-
-        for (ModelAlunoProvaCorrecao mapc: listAlunoProvaCorrecao) _listModelAlunos.addElement(mapc);
-        for (ModelEntradaProvaCorrecao mepc: listEntradaProvaCorrecao) _listModelEntradas.addElement(mepc);
-        for (Aluno aluno: listAlunoSemEntrada) _listModelAlunosSemEntrada.addElement(aluno);
+        // preencher os list models com o conteudo corrente do modelo
+        preencherListModels();
 
         // criar lists
         _listAlunos = new JList(_listModelAlunos);
@@ -382,56 +340,30 @@ public class PanelProvaCorrecao extends JPanel {
 
 
         { // attatch model
+            // Every change of the model (in particular the entries produced by
+            // "Corrigir", which are added from the worker thread that processes
+            // the pictures) refreshes the three lists of this panel. The refresh
+            // is always performed on the event dispatch thread: touching the
+            // list models from the worker thread left the JLists with a stale
+            // layout, so the newly graded students were not painted until the
+            // panel was rebuilt (by selecting another exam, or restarting).
             _modelProvaCorrecao.addListener(new ModelListener() {
-                public void update(Model model) {}
+                public void update(Model model) {
+                    refreshListas();
+                }
                 public void nodeAdded(Model model, Model addedModel, int index) {
-                    if (addedModel instanceof ModelAlunoProvaCorrecao) {
-                        _listModelAlunos.addElement(addedModel);
-                        updateLabelContadores();
-                    }
-                    else if (addedModel instanceof ModelEntradaProvaCorrecao) {
-                        _listModelEntradas.addElement(addedModel);
-                        updateLabelContadores();
-                    }
+                    refreshListas();
                 }
                 public void nodesAdded(Model model, java.util.List<Model> addedModel, int index) {
-                    for (Model m: addedModel) {
-                        if (m instanceof ModelAlunoProvaCorrecao) {
-                            _listModelAlunos.addElement(m);
-                            updateLabelContadores();
-                        }
-                        else if (m instanceof ModelEntradaProvaCorrecao) {
-                            _listModelEntradas.addElement(m);
-                            updateLabelContadores();
-                        }
-                    }
+                    refreshListas();
                 }
                 public void nodesLoaded(Model model, java.util.List<Model> addedModel) {
-                    for (Model m: addedModel) {
-                        if (m instanceof ModelAlunoProvaCorrecao) {
-                            _listModelAlunos.addElement(m);
-                            updateLabelContadores();
-                        }
-                        else if (m instanceof ModelEntradaProvaCorrecao) {
-                            _listModelEntradas.addElement(m);
-                            updateLabelContadores();
-                        }
-                    }
+                    refreshListas();
                 }
                 public void nodeRemoved(Model model, Model removedModel) {
-                    if (removedModel instanceof ModelAlunoProvaCorrecao) {
-                        _listModelAlunos.removeElement(removedModel);
-                        updateLabelContadores();
-                    }
-                    else if (removedModel instanceof ModelEntradaProvaCorrecao) {
-                        _listModelEntradas.removeElement(removedModel);
-                        updateLabelContadores();
-                    }
+                    refreshListas();
                 }
             });
-
-
-
         } // attatch model
 
 
@@ -533,6 +465,8 @@ public class PanelProvaCorrecao extends JPanel {
     }
 
     private void updateLabelContadores() {
+        if (_lblContadores == null)
+            return;
         _lblContadores.setText(
         _modelProvaCorrecao.getProvaCorrecao().getNome()+" ("+
         _modelProvaCorrecao.getNumAlunosComEntrada()+"/"+
@@ -540,11 +474,120 @@ public class PanelProvaCorrecao extends JPanel {
         _modelProvaCorrecao.getNumEntradas()+")");
     }
 
-    private void adicionarAlunos() throws SQLException {
-        Instituicao i = this._modelProvaCorrecao.getProva().getInstituicao_Prova();
-        Vector v = App.getRepositorio().consultarAlunoPorInstituicao(i);
+    /**
+     * (Re)builds the three list models out of the current content of the model:
+     * the students of the correction, the entries (graded exams) and the
+     * students that still have no entry.
+     */
+    private void preencherListModels() {
+        ArrayList<ModelAlunoProvaCorrecao> listAlunoProvaCorrecao = new ArrayList<ModelAlunoProvaCorrecao>(_modelProvaCorrecao.getAlunosProvaCorrecao());
+        Collections.sort(listAlunoProvaCorrecao,new Comparator() {
+            public int compare(Object o1, Object o2) {
+                ModelAlunoProvaCorrecao a = (ModelAlunoProvaCorrecao) o1;
+                ModelAlunoProvaCorrecao b = (ModelAlunoProvaCorrecao) o2;
+                return a.getAluno().getNome().compareTo(b.getAluno().getNome());
+            }
+            public boolean equals(Object obj) {
+                return false;
+            }
+        });
+
+        ArrayList<Aluno> listAlunoSemEntrada = new ArrayList<Aluno>(_modelProvaCorrecao.getAlunosSemEntradas());
+        Collections.sort(listAlunoSemEntrada,new Comparator() {
+            public int compare(Object o1, Object o2) {
+                Aluno a = (Aluno) o1;
+                Aluno b = (Aluno) o2;
+                return a.getNome().compareTo(b.getNome());
+            }
+            public boolean equals(Object obj) {
+                return false;
+            }
+        });
+
+        ArrayList<ModelEntradaProvaCorrecao> listEntradaProvaCorrecao = new ArrayList<ModelEntradaProvaCorrecao>(_modelProvaCorrecao.getEntradasProvaCorrecao());
+        Collections.sort(listEntradaProvaCorrecao,new Comparator() {
+            public int compare(Object o1, Object o2) {
+                ModelEntradaProvaCorrecao a = (ModelEntradaProvaCorrecao) o1;
+                ModelEntradaProvaCorrecao b = (ModelEntradaProvaCorrecao) o2;
+                if (a.getAluno() != null && b.getAluno() != null) {
+                    return a.getAluno().getNome().compareTo(b.getAluno().getNome());
+                }
+                else if (a.getAluno() != null) return -1;
+                else if (b.getAluno() != null) return 1;
+                else return 0;
+            }
+            public boolean equals(Object obj) {
+                return false;
+            }
+        });
+
+        _listModelAlunos.clear();
+        _listModelEntradas.clear();
+        _listModelAlunosSemEntrada.clear();
+
+        for (ModelAlunoProvaCorrecao mapc: listAlunoProvaCorrecao) _listModelAlunos.addElement(mapc);
+        for (ModelEntradaProvaCorrecao mepc: listEntradaProvaCorrecao) _listModelEntradas.addElement(mepc);
+        for (Aluno aluno: listAlunoSemEntrada) _listModelAlunosSemEntrada.addElement(aluno);
+    }
+
+    /**
+     * Refreshes the lists (and the counters) of this panel on the event dispatch
+     * thread, whatever thread signalled the change of the model.
+     */
+    void refreshListas() {
+        Runnable r = new Runnable() {
+            public void run() {
+                Object entradaSelecionada = _listEntradas == null? null: _listEntradas.getSelectedValue();
+                preencherListModels();
+                if (entradaSelecionada != null && _listModelEntradas.contains(entradaSelecionada))
+                    _listEntradas.setSelectedValue(entradaSelecionada, true);
+                updateLabelContadores();
+                if (_listAlunos != null) { _listAlunos.revalidate(); _listAlunos.repaint(); }
+                if (_listEntradas != null) { _listEntradas.revalidate(); _listEntradas.repaint(); }
+                if (_listAlunosSemEntrada != null) { _listAlunosSemEntrada.revalidate(); _listAlunosSemEntrada.repaint(); }
+            }
+        };
+        if (javax.swing.SwingUtilities.isEventDispatchThread())
+            r.run();
+        else
+            javax.swing.SwingUtilities.invokeLater(r);
+    }
+
+    /**
+     * Students of the exam's folder (institution) that are not yet part of this
+     * correction: the content offered by the "Adicionar Alunos" dialog.
+     *
+     * The list is taken from the model of the institution (ModelInstituicao),
+     * which is the object kept up to date by every operation of the UI - notably
+     * by "Importar Alunos" - instead of from a repository query, which used to
+     * be answered from a stale cache and therefore missed the students that had
+     * just been imported.
+     */
+    java.util.List<Aluno> getAlunosDisponiveis() throws SQLException {
+        ArrayList<Aluno> v = new ArrayList<Aluno>();
+        ModelInstituicao modelInstituicao =
+            (ModelInstituicao) _modelProvaCorrecao.getAscendentByClass(ModelInstituicao.class);
+        if (modelInstituicao != null) {
+            for (ModelAluno ma : modelInstituicao.getAlunos())
+                v.add(ma.getAluno());
+        }
+        else {
+            // no model available (should not happen): fall back to the repository
+            Instituicao i = this._modelProvaCorrecao.getProva().getInstituicao_Prova();
+            v.addAll(App.getRepositorio().consultarAlunoPorInstituicao(i));
+        }
         v.removeAll(_modelProvaCorrecao.getAlunos());
-        ListCellRenderer renderer = new DefaultListCellRenderer() {
+        Collections.sort(v, new Comparator<Aluno>() {
+            public int compare(Aluno a, Aluno b) {
+                return a.getNome().compareTo(b.getNome());
+            }
+        });
+        return v;
+    }
+
+    /** renderer of the lists of students ("Adicionar Alunos" dialog). */
+    ListCellRenderer newAlunoListCellRenderer() {
+        return new DefaultListCellRenderer() {
             public java.awt.Component getListCellRendererComponent(JList list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
                 super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 Aluno x = (Aluno) value;
@@ -553,6 +596,11 @@ public class PanelProvaCorrecao extends JPanel {
                 return this;
             }
         };
+    }
+
+    private void adicionarAlunos() throws SQLException {
+        Vector v = new Vector(getAlunosDisponiveis());
+        ListCellRenderer renderer = newAlunoListCellRenderer();
         DialgoChooseObjects d = new DialgoChooseObjects((JFrame)this.getTopLevelAncestor(),"Adicionar Alunos",true,new Vector(),v,renderer);
         linsoft.gui.util.Library.resizeAndCenterWindow(d,500,400);
         d.setVisible(true);

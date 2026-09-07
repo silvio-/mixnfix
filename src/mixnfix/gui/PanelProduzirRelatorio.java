@@ -108,55 +108,91 @@ class PanelProduzirRelatorio extends JPanel {
         this.add(btnProduzir,new GridBagConstraints(0,i,2,1,0,0,GridBagConstraints.CENTER,GridBagConstraints.NONE,new Insets(20,2,2,2),0,0));
     }
 
+    /** name of the PDF file to be produced (the "Nome de Arquivo:" field). */
+    void setArquivoDeSaida(String fileName) {
+        this._tfInpuFileName.setTextAndSave(fileName);
+    }
+
     private void produzir() throws Exception {
+        File pdf = produzirPDF();
+        if (pdf == null) {
+            JOptionPane.showMessageDialog(this.getTopLevelAncestor(), "Problema no arquivo .tex ao rodar o comando pdflatex");
+            return;
+        }
+
+        abrirPDF(pdf);
+
+        this.getTopLevelAncestor().setVisible(false); // close window
+    }
+
+    /**
+     * Produces the PDF report of the correction on the file chosen by the user.
+     * Returns the produced file, or null if pdflatex failed.
+     */
+    File produzirPDF() throws Exception {
 
         int i=1;
         for (ModelEntradaProvaCorrecao m: _model.getEntradasProvaCorrecaoOrdenadas()) {
-            ModelProvaCorrecaoReport.gerarImagem(m,Controller.TMP_DIR+"/img"+(i++)+".jpg");
+            ModelProvaCorrecaoReport.gerarImagem(m,Controller.TMP_DIR+"img"+(i++)+".jpg");
         }
 
         File outputFile = this._tfInpuFileName.getFile();
+        File outputDir = outputFile.getAbsoluteFile().getParentFile();
+        if (outputDir == null)
+            outputDir = new File(".").getAbsoluteFile();
+        outputDir.mkdirs();
 
-        String baseName = "relatorio"+_model.getProvaCorrecao().getId();
-        String baseDir = outputFile.getParentFile().getAbsolutePath().replace('\\','/');
+        String fileName = outputFile.getName();
+        String baseName = fileName.toLowerCase().endsWith(".pdf")
+                          ? fileName.substring(0,fileName.length()-4)
+                          : fileName;
+        if ("".equals(baseName))
+            baseName = "relatorio"+_model.getProvaCorrecao().getId();
 
+        File texFile = new File(Controller.TMP_DIR, baseName+".tex");
 
-        PrintWriter pw = new PrintWriter(Controller.TMP_DIR+baseName+".tex");
+        // The LaTeX source is written in UTF-8 (the encoding of every string of
+        // the application: names of students, of the exam, of the folder, the
+        // text of the questions) and the preamble asks for the utf8 input
+        // encoding accordingly. It used to be written with the platform default
+        // encoding while declaring latin1, which made pdflatex stop with
+        // "Package inputenc Error: Keyboard character used is undefined".
+        PrintWriter pw = new PrintWriter(texFile, "UTF-8");
         pw.println(ModelProvaCorrecaoReport.getRelatorioPDFLaTeX(_model));
         pw.close();
 
+        // The command is the one configured on the settings panel of the
+        // application (ConfiguracaoMIXnFIX.compileTEX2PDF), as everywhere else.
+        // It used to be a hard coded command line carrying -include-directory
+        // and -aux-directory, two MiKTeX only options that TeX Live's pdflatex
+        // rejects (and that indeed were nowhere to be seen on the settings
+        // panel). pdflatex runs inside the temporary directory, where both the
+        // .tex file and the img<n>.jpg pictures generated above live, and
+        // writes its results into the directory chosen by the user.
+        String command = App.getConfiguracao().getCommandCompileTEX2PDF(
+            Controller.TMP_DIR, outputDir.getAbsolutePath(), texFile.getName());
+        String argv[] = Library.splitCommandLine(command);
+        String envp[] = { "TEXINPUTS=" + Controller.TMP_DIR + ":" };
 
-        // _prova.setProperty();
-        int status = Library.executeCommand("pdflatex -halt-on-error" +
-                                        " -include-directory=" + Controller.TMP_DIR +
-                                        " -output-directory=" + baseDir +
-                                        " -aux-directory=" + Controller.TMP_DIR +
-                                        " " + Controller.TMP_DIR + baseName + ".tex", true);
-
-        if (status != 0) {
-            JOptionPane.showMessageDialog(this.getTopLevelAncestor(), "Problema no arquivo .tex ao rodar o comando pdflatex");
-            return;
+        // two runs: the second one resolves the hyperref links of the "listão"
+        for (int pass = 0; pass < 2; pass++) {
+            int status = Library.executeCommand(argv, Controller.TMP_DIR, envp, true);
+            if (status != 0)
+                return null;
         }
 
-        status = Library.executeCommand("pdflatex -halt-on-error" +
-                                        " -include-directory=" + Controller.TMP_DIR +
-                                        " -output-directory=" + baseDir +
-                                        " -aux-directory=" + Controller.TMP_DIR +
-                                        " " + Controller.TMP_DIR + baseName + ".tex", true);
+        return new File(outputDir, baseName + ".pdf");
+    }
 
-        if (status != 0) {
-            JOptionPane.showMessageDialog(this.getTopLevelAncestor(), "Problema no arquivo .tex ao rodar o comando pdflatex");
-            return;
+    private void abrirPDF(File pdf) {
+        try {
+            // viewer configured on the settings panel (ConfiguracaoMIXnFIX.openPDF)
+            String command = App.getConfiguracao().getCommandOpenPDF(pdf.getAbsolutePath());
+            Library.executeCommand(Library.splitCommandLine(command), null, null, false);
         }
-
-        String st = mixnfix.gui.App.getProperty("acrobat");
-        if (st == null || "".equals(st)) {
-            st = "C:/Program Files/Adobe/Acrobat 7.0/Reader/AcroRd32.exe";
-            mixnfix.gui.App.setProperty("acrobat", st);
+        catch (Exception ex) {
+            ex.printStackTrace();
         }
-        Library.executeCommand("\"" + st + "\" " + baseDir+baseName+".pdf", false);
-
-        this.getTopLevelAncestor().setVisible(false); // close window
     }
 
 

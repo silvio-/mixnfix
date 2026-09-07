@@ -41,7 +41,7 @@ public class ModelProvaCorrecaoReport {
       //LATEX HEADERS
         report.append("\\documentclass[a4paper,12pt]{article}\n");
         report.append("\\usepackage[portuges]{babel}\n");
-        report.append("\\usepackage[latin1]{inputenc}\n");
+        report.append("\\usepackage[utf8]{inputenc}\n");
         report.append("\\usepackage{amsfonts,amssymb}\n");
         report.append("\\usepackage[dvips,pdftex]{color}\n");
         report.append("\\usepackage{multicol}\n");
@@ -151,7 +151,7 @@ public class ModelProvaCorrecaoReport {
       //LATEX HEADERS
         report.append("\\documentclass[a4paper,12pt]{article}\n");
         report.append("\\usepackage[portuges]{babel}\n");
-        report.append("\\usepackage[latin1]{inputenc}\n");
+        report.append("\\usepackage[utf8]{inputenc}\n");
         report.append("\\usepackage{amsfonts,amssymb}\n");
         report.append("\\usepackage[dvips,pdftex]{color}\n");
         report.append("\\usepackage{multicol}\n");
@@ -318,7 +318,7 @@ public class ModelProvaCorrecaoReport {
         //LATEX HEADERS
         report.append("\\documentclass[a4paper,12pt]{article}\n");
         report.append("\\usepackage[portuges]{babel}\n");
-        report.append("\\usepackage[latin1]{inputenc}\n");
+        report.append("\\usepackage[utf8]{inputenc}\n");
         report.append("\\usepackage{amsfonts,amssymb}\n");
         report.append("\\usepackage[dvips,pdftex]{color}\n");
         report.append("\\usepackage{multicol}\n");

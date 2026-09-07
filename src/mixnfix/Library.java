@@ -69,6 +69,77 @@ public class Library {
         // System.out.println("exitValue was " + r);
     }
 
+    /**
+     * Splits a command line into its arguments, honouring double quotes and
+     * blanks escaped with a backslash (the way the command templates of the
+     * settings panel, see ConfiguracaoMIXnFIX.getCommandCompileTEX2PDF(),
+     * quote directory and file names).
+     */
+    public static String[] splitCommandLine(String cmd) {
+        ArrayList<String> args = new ArrayList<String>();
+        StringBuffer current = new StringBuffer();
+        boolean quoted = false;
+        boolean has = false;
+        for (int i = 0; i < cmd.length(); i++) {
+            char c = cmd.charAt(i);
+            if (c == '\\' && i + 1 < cmd.length() && cmd.charAt(i + 1) == ' ') {
+                current.append(' ');
+                has = true;
+                i++;
+            }
+            else if (c == '"') {
+                quoted = !quoted;
+                has = true;
+            }
+            else if ((c == ' ' || c == '\t' || c == '\n') && !quoted) {
+                if (has) {
+                    args.add(current.toString());
+                    current.setLength(0);
+                    has = false;
+                }
+            }
+            else {
+                current.append(c);
+                has = true;
+            }
+        }
+        if (has)
+            args.add(current.toString());
+        return args.toArray(new String[args.size()]);
+    }
+
+    /**
+     * Executes a command given as an already split argument list (so arguments
+     * containing blanks - directory names, file names - are passed untouched),
+     * optionally inside a working directory and with extra environment
+     * variables ("NAME=value").
+     */
+    public static int executeCommand(String[] cmd, String dir, String[] envp, boolean wait) throws Exception {
+        StringBuffer sb = new StringBuffer();
+        for (String s: cmd) sb.append(s).append(' ');
+        System.out.println((dir != null? "["+dir+"] ": "")+sb.toString());
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        if (envp != null) {
+            Map<String, String> env = pb.environment();
+            for (String pair: envp) {
+                int eq = pair.indexOf('=');
+                if (eq > 0)
+                    env.put(pair.substring(0, eq), pair.substring(eq + 1));
+            }
+        }
+        if (dir != null)
+            pb.directory(new File(dir));
+        Process proc = pb.start();
+        SG out = new SG(proc.getInputStream(),"out> ");
+        SG err = new SG(proc.getErrorStream(),"err> ");
+        out.start();
+        err.start();
+        if (wait)
+            return proc.waitFor();
+        else
+            return 0;
+    }
+
     public static int executeCommand(String cmd, String dir, String[] envp, boolean wait) throws Exception {
         System.out.println(cmd);
         String tt[] = cmd.split("[ ]+");

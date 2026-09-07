@@ -7,7 +7,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Vector;
 
 import linsoft.log.Log;
 import mixnfix.gui.App;
@@ -106,13 +108,26 @@ public class ExtensaoRepositorio {
             }
             s.append("(" + provaCorrecao.getId() + "," + a.getId() + ",0)");
             first = false;
-            result.add(new AlunoProvaCorrecao(0,a,provaCorrecao));
+            AlunoProvaCorrecao apc = new AlunoProvaCorrecao(0,a,provaCorrecao);
+            apc.setPersistent(true);
+            result.add(apc);
         }
         st.executeUpdate(s.toString());
         st.close();
 
+        // written directly on the database: keep the cache in sync (see the
+        // comment on inserirAlunos below)
+        App.getRepositorioCache().adicionarAlunoProvaCorrecaoNaCache(new Vector<AlunoProvaCorrecao>(result));
+
         System.out.println("tempo para adicionar alunos (mseg): "+(System.currentTimeMillis()-t0));
         return result;
+    }
+
+    /** SQL quoting of a string literal (a single quote is doubled). */
+    private static String quote(String s) {
+        if (s == null)
+            return "";
+        return s.replace("'", "''");
     }
 
     static StringBuffer _buffer = new StringBuffer();
@@ -127,9 +142,9 @@ public class ExtensaoRepositorio {
                 if (!first)
                     _buffer.append(",");
                 _buffer.append("('");
-                _buffer.append(aluno.getNome());
+                _buffer.append(quote(aluno.getNome()));
                 _buffer.append("','");
-                _buffer.append(aluno.getMatricula()); // foto
+                _buffer.append(quote(aluno.getMatricula()));
                 _buffer.append("',");
                 _buffer.append(instituicao.getId());
 
@@ -141,18 +156,44 @@ public class ExtensaoRepositorio {
 
             Statement s = App.getConnection().createStatement();
 
-            // adding all controlpoints
+            // adding all students
             s.executeUpdate(_buffer.toString(),Statement.RETURN_GENERATED_KEYS);
 
-            // generated keys
-            ResultSet rs = s.getGeneratedKeys();
-            int i = 0;
-            while (rs.next()) {
-                Aluno aluno = alunos.get(i);
-                int id = rs.getInt(1);
-                aluno.setId(id);
-                i++;
+            // A multi row insert only reports ONE generated key (the last one),
+            // so the identifiers of the students just inserted are read back
+            // from the database by their matricula. They used to be left at 0,
+            // which made every imported student share the same (invalid)
+            // identifier.
+            HashMap<String,Aluno> porMatricula = new HashMap<String,Aluno>();
+            for (Aluno aluno : alunos) {
+                aluno.setId(0);
+                if (aluno.getMatricula() != null)
+                    porMatricula.put(aluno.getMatricula(), aluno);
             }
+            ResultSet rs = s.executeQuery(
+                "select id_aluno, matricula from Aluno where id_instituicao = " + instituicao.getId());
+            while (rs.next()) {
+                Aluno aluno = porMatricula.get(rs.getString(2));
+                if (aluno != null)
+                    aluno.setId(rs.getInt(1));
+            }
+            rs.close();
+
+            // The rows above were written straight into the database, bypassing the
+            // Repositorio (and therefore its cache). Complete the objects (the
+            // institution they were just inserted with, and their persistent state)
+            // and register them on the cache, otherwise every later query answered
+            // from the cache (e.g. consultarAlunoPorInstituicao(), used by the
+            // "Adicionar Alunos" dialog of the grading module) would not see the
+            // students just imported until the application was restarted.
+            Vector<Aluno> vector = new Vector<Aluno>(alunos.size());
+            for (Aluno aluno : alunos) {
+                if (aluno.getInstituicao_Aluno() == null)
+                    aluno.setInstituicao_Aluno(instituicao); // still transitory: no update issued
+                aluno.setPersistent(true);
+                vector.add(aluno);
+            }
+            App.getRepositorioCache().adicionarAlunoNaCache(vector);
         }
 
         if (alunosTurmas.size() > 0) {
@@ -177,6 +218,14 @@ public class ExtensaoRepositorio {
 
             // adding all controlpoints
             s.executeUpdate(_buffer.toString());
+
+            // same as above: keep the cache in sync with what was written directly
+            Vector<AlunoTurma> vector = new Vector<AlunoTurma>(alunosTurmas.size());
+            for (AlunoTurma alunoTurma : alunosTurmas) {
+                alunoTurma.setPersistent(true);
+                vector.add(alunoTurma);
+            }
+            App.getRepositorioCache().adicionarAlunoTurmaNaCache(vector);
         }
     }
 

@@ -240,14 +240,27 @@ public class EC {
             // adding all controlpoints
             s.executeUpdate(_buffer.toString(),Statement.RETURN_GENERATED_KEYS);
 
-            // generated keys
-            ResultSet rs = s.getGeneratedKeys();
-            int i = 0;
+            // A multi row insert only reports ONE generated key (the last one),
+            // so the identifiers are read back from the database through the
+            // name of the picture, which is unique. They used to be left at 0,
+            // and the entries of the batch ended up sharing the same (invalid)
+            // identifier - which, for instance, made "Remover Entradas" delete
+            // the wrong rows.
+            HashMap<String,EC> porFoto = new HashMap<String,EC>();
+            StringBuffer fotos = new StringBuffer();
+            for (EC ec: list) {
+                ec.setIdEntradaProvaCorrecao(0);
+                porFoto.put(ec.getFotoName(), ec);
+                if (fotos.length() > 0)
+                    fotos.append(",");
+                fotos.append("'").append(ec.getFotoName()).append("'");
+            }
+            ResultSet rs = s.executeQuery(
+                "select id_entradaprovacorrecao, foto from entradaprovacorrecao where foto in (" + fotos + ")");
             while (rs.next()) {
-                EC ec = list.get(i);
-                int id = rs.getInt(1);
-                ec.setIdEntradaProvaCorrecao(id);
-                i++;
+                EC ec = porFoto.get(rs.getString(2));
+                if (ec != null)
+                    ec.setIdEntradaProvaCorrecao(rs.getInt(1));
             }
             rs.close();
         } // adicionar entradaprovacorrecao

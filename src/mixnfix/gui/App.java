@@ -81,6 +81,19 @@ public class App  {
         return _repositorioBD;
     }
 
+    /**
+     * The cache in front of the database. Whoever writes objects directly on the
+     * database (bypassing the Repositorio interface, as the batch insertions of
+     * mixnfix.extRepositorio.ExtensaoRepositorio do) must register them here,
+     * otherwise the already loaded (and therefore not queried again) cached
+     * collections stay stale until the application is restarted.
+     */
+    public static RepositorioCache getRepositorioCache() {
+        if (_repositorioCache == null)
+            App.getRepositorio();
+        return _repositorioCache;
+    }
+
     public static void createFreshCacheRepository() {
         setCacheRepository(new RepositorioCache());
     }

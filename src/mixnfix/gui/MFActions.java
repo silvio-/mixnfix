@@ -567,7 +567,7 @@ class MFActionImportarAlunos
     }
 
 
-    private void matricularAlunos2(File f) {
+    void matricularAlunos2(File f) {
         try {
             ArrayList<Aluno> alunos = new ArrayList<Aluno> ();
             ArrayList<AlunoTurma> alunosTurmas = new ArrayList<AlunoTurma> ();
@@ -584,19 +584,10 @@ class MFActionImportarAlunos
                 try {
                     StringTokenizer t = new StringTokenizer(line, "\t");
                     String matricula = t.nextToken().trim();
-                    StringBuffer nomeBuffer = new StringBuffer(t.nextToken().trim());
-                    int index = 0;
-                    while (true) {
-                        index = nomeBuffer.indexOf("'", index);
-                        if (index == -1)
-                            break;
-                        else {
-                            nomeBuffer.replace(index, index + 1, "\\'");
-                            index = index + 2;
-                        }
-                    }
-
-                    String nome = nomeBuffer.toString();
+                    // the name is kept exactly as it is written on the file
+                    // (quoting for SQL is done, correctly, where the insert
+                    // statement is built: ExtensaoRepositorio.inserirAlunos)
+                    String nome = t.nextToken().trim();
 
                     ModelAluno mAluno = _modelInstituicao.getAlunoByMatricula(matricula);
                     if (mAluno != null) {
@@ -604,7 +595,11 @@ class MFActionImportarAlunos
                         continue;
                     }
 
-                    Aluno aluno = new Aluno(0, nome, matricula, null);
+                    // the student belongs to the institution (folder) the list is
+                    // being imported into: without it the object would not be found
+                    // by consultarAlunoPorInstituicao() (used, for instance, by the
+                    // "Adicionar Alunos" dialog of the grading module)
+                    Aluno aluno = new Aluno(0, nome, matricula, _modelInstituicao.getInstituicao());
 
                     // matricular aluno na turma
                     while (t.hasMoreTokens()) {
@@ -3276,9 +3271,29 @@ class MFActionColetarProvas extends AbstractAction {
         return null;
     }
 
-    private void coletar(File files[]) {
+    /**
+     * Discards repeated files: the very same picture may be picked more than
+     * once (the file chooser allows it, and directories of pictures often carry
+     * copies of the same shot). Comparison is made by canonical path.
+     */
+    static File[] removerArquivosRepetidos(File files[]) {
+        ArrayList<File> result = new ArrayList<File>(files.length);
+        HashSet<String> seen = new HashSet<String>();
+        for (File f: files) {
+            String key;
+            try { key = f.getCanonicalPath(); }
+            catch (IOException ex) { key = f.getAbsolutePath(); }
+            if (seen.add(key))
+                result.add(f);
+            else
+                System.out.println("Arquivo repetido (copia descartada): "+f.getAbsolutePath());
+        }
+        return result.toArray(new File[result.size()]);
+    }
+
+    void coletar(File files[]) {
         try {
-            coletarHardWork(files);
+            coletarHardWork(removerArquivosRepetidos(files));
         }
         catch (SQLException ex) {
             ex.printStackTrace();
@@ -3556,10 +3571,15 @@ class MFActionColetarProvas extends AbstractAction {
 
             return EC.PROCESSAMENTO_MATRICULA_FALHOU;
         }
-        /*
-        else if (_matriculasOk.contains(idAluno)) {
+        if (_matriculasOk.contains(idAluno)) {
+            // Another picture of the exam of this very student was already
+            // processed in this batch: it is a copy (the same sheet scanned or
+            // photographed more than once), so it is discarded instead of
+            // producing a second entry (and a second occurrence of the student
+            // on the list of graded exams).
+            System.out.println("Matricula Duplicada (copia descartada): "+idAluno+" ["+fotoFile.getName()+"]");
             return EC.PROCESSAMENTO_DUPLICATA;
-        }*/
+        }
 
         _matriculasOk.add(idAluno);
 
